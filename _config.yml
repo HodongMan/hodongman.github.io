@@ -2,8 +2,8 @@ title:             Hodongman의 개발 블로그
 email:             jhd9206@gmail.com
 description:       연구한거 기록용
 author:            hodongman
-baseurl:           "/startbootstrap-clean-blog-jekyll"
-url:               "http://hodongman.github.io"
+baseurl:           "/"
+url:               "https://hodongman.github.io"
 
 # Social Profiles
 twitter_username:  hodongman
