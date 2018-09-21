@@ -21,53 +21,59 @@ background: '/img/posts/06.jpg'
 </p>
 
 <p>
-    여러 HTTP Header가 사용되지만 이 중에서도 가장 많이 사용되는 것은 Access-Control-Allow-Origin(어떤 Origin을 허용할지), Access-Control-Allow-Methods(어떤 Method를 허용할지), Access-Control-Allow-Headers(요청이 성공할 경우 어떤 Header를 사용할 수 있는지)등의 HTTP Header입니다.
+    여러 HTTP Header가 사용되지만 이 중에서도 가장 많이 사용되는 것은 <br/>
+    Access-Control-Allow-Origin(어떤 Origin을 허용할지)<br/>
+    Access-Control-Allow-Methods(어떤 Method를 허용할지)<br/>
+    Access-Control-Allow-Headers(요청이 성공할 경우 어떤 Header를 사용할 수 있는지)<br/>
+    등의 HTTP Header입니다.
 </p>
 
-<pre>
-    <code>
-        package main
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            package main
 
-        import (
-            "net/http"
-            "encoding/json"
-            "log"
-            "fmt"
-        )
+            import (
+                "net/http"
+                "encoding/json"
+                "log"
+                "fmt"
+            )
 
-        type MessageJSONResponse struct {
-            result string `json:result`
-        }
-
-        func main() {
-            const port := 8080
-
-            http.HandleFunc("/cors", corsHandler)
-
-            log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
-        }
-
-        func corsHandler(w http.ResponseWriter, r *http.Request) {
-            
-            if r.Method == "OPTIONS" {
-                w.Header().Add("Access-Control-Allow-Origin", "*")
-                w.Header().Add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-                w.Header().Add("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-                w.WriteHeader(http.StatusNoContent)
-                return
+            type MessageJSONResponse struct {
+                result string `json:result`
             }
 
-            result := MessageJSONResponse{result: "CORS Checking 성공"}
-            jsonResult, err := json.Marshal(result)
+            func main() {
+                const port := 8080
 
-            if err != nil {
-                panic("Data Error")
+                http.HandleFunc("/cors", corsHandler)
+
+                log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
             }
 
-            fmt.Fprint(w, string(jsonResult))
-        }
-    </code>
-</pre>
+            func corsHandler(w http.ResponseWriter, r *http.Request) {
+                
+                if r.Method == "OPTIONS" {
+                    w.Header().Add("Access-Control-Allow-Origin", "*")
+                    w.Header().Add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+                    w.Header().Add("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+                    w.WriteHeader(http.StatusNoContent)
+                    return
+                }
+
+                result := MessageJSONResponse{result: "CORS Checking 성공"}
+                jsonResult, err := json.Marshal(result)
+
+                if err != nil {
+                    panic("Data Error")
+                }
+
+                fmt.Fprint(w, string(jsonResult))
+            }
+        </code>
+    </pre>
+</div>
 
 <p>
     간단하게 코드를 확인해보면 OPTIONS Method 일때 HTTP Header에 CORS 정책에 알맞은 정보를 담아서 요청한 곳에 전달합니다. 저 HTTP Header 정보에 따라 HTTP 요청이 진행될 것입니다. Browser가 Option Method로 정책에 관한 물어본 사항을 전달하게 되면 Browser가 다음에 진행될 XMLHttpRequest에 대해서는 잘 처리해 줄겁니다.
