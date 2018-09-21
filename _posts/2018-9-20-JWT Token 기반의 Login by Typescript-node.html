@@ -2,7 +2,7 @@
 layout: post
 title:  "JWT 기반의 Login by Typescript-node"
 subtitle: "JWT로 Json 형태의 로그인 서비스 구현하기 - 위를 활용해서 Micro Service, Rest API에서 Stateless한 인증을 만들 수 있습니다."
-date:   2017-9-20 10:45:13 -0400
+date:   2018-9-20 10:45:13 -0400
 background: '/img/posts/06.jpg'
 ---
 
@@ -12,7 +12,7 @@ background: '/img/posts/06.jpg'
 
 <p>JSON Web Token (JWT)은 JSON 객체로서 당사자간에 안전하게 정보를 전송할 수있는 작고 독립적 인 방법을 정의 하는 공개 표준 ( RFC 7519 )입니다. 이 정보는 디지털로 서명 되었기 때문에 검증되고 신뢰할 수 있습니다. JWT는 RSA 또는 ECDSA를 사용하는 비밀 ( HMAC 알고리즘 사용) 또는 공용 / 개인 키 쌍을 사용하여 서명 할 수 있습니다.</p>
 
-<p>JWT는 당사자 간의 비밀 유지를 위해 암호화 될 수 있지만 서명 된 토큰에 중점을 둘 것 입니다. 서명 된 토큰은 그 안에 포함 된 클레임 의 무결성 을 검증 할 수 있지만 암호화 된 토큰 은 다른 당사자의 클레임을 숨 깁니다 . 토큰이 공용 / 개인 키 쌍을 사용하여 서명 된 경우, 서명은 개인 키를 보유한 당사자 만 서명 한 것임을 증명합니다. [출처 : https://jwt.io/introduction/]</p>
+<p>JWT는 당사자 간의 비밀 유지를 위해 암호화 될 수 있지만 서명 된 토큰에 중점을 둘 것 입니다. 서명 된 토큰은 그 안에 포함 된 클레임 의 무결성 을 검증 할 수 있지만 암호화 된 토큰 은 다른 당사자의 클레임을 숨 깁니다 . 토큰이 공용 / 개인 키 쌍을 사용하여 서명 된 경우, 서명은 개인 키를 보유한 당사자 만 서명 한 것임을 증명합니다.</p>
 
 <p>따라서 위 서비스는 작고 안전한 방법으로 정보를 전송할 수 있습니다. 또한 서명된 토큰에 중점을 두어서 비밀 유지를 할 수도 있습니다. 따라서 그 토큰이 중심이 되고 때로는 토큰 자체가 위 기능을 수행할 수도 있습니다. 이게 핵심 부분입니다.</p>
 
@@ -20,6 +20,38 @@ background: '/img/posts/06.jpg'
 
 <p> <span class="caption text-muted">Authorization</span> : JWT를 사용하는 가장 일반적인 시나리오입니다. 사용자가 로그인하면 각 후속 요청에 JWT가 포함되어 사용자가 해당 토큰으로 허용되는 경로, 서비스 및 리소스에 액세스 할 수 있습니다. 싱글 사인온 (Single Sign On)은 오버 헤드가 적고 다른 도메인에서 쉽게 사용할 수 있기 때문에 요즘 JWT를 널리 사용하는 기능입니다.</p>
 
-<p> <span class="caption text-muted">Information Exchange</span> : SON 웹 토큰은 당사자간에 정보를 안전하게 전송하는 좋은 방법입니다. JWT는 서명 할 수 있기 때문에 (예 : 공개 키 / 개인 키 쌍을 사용하여) 발신자가 자신이 말하는 사람인지 확인할 수 있습니다. 또한 서명이 헤더와 페이로드를 사용하여 계산되므로 내용이 변조되지 않았는지 확인할 수도 있습니다. [출처 : https://jwt.io/introduction/]</p>
+<p> <span class="caption text-muted">Information Exchange</span> : SON 웹 토큰은 당사자간에 정보를 안전하게 전송하는 좋은 방법입니다. JWT는 서명 할 수 있기 때문에 (예 : 공개 키 / 개인 키 쌍을 사용하여) 발신자가 자신이 말하는 사람인지 확인할 수 있습니다. 또한 서명이 헤더와 페이로드를 사용하여 계산되므로 내용이 변조되지 않았는지 확인할 수도 있습니다.</p>
 
 <p>우리는 Authorization을 활용해서 로그인을 구현할 것입니다. 하지만 로그인(인증된) 상태에서만 정보 교환을 할 수 있게 할 것입니다. 이것이 JWT Token을 사용하는 이유입니다.</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            # Site settings
+            title: Clean Blog
+            header-img: img/home-bg.jpg
+            email: your-email@yourdomain.com
+            copyright_name: Your/Project/Corporate Name
+            description: "Write your site description here. It will be used as your sites meta description as well!"
+            baseurl: "/startbootstrap-clean-blog-jekyll"
+            url: "http://yourdomain.com"
+            twitter_username: SBootstrap
+            github_username:  davidtmiller
+            facebook_username:  IronSummitMedia
+            email_username:  your-email@yourdomain.com
+
+            # Google Analytics
+            # To enable google analytics, uncomment below line with a valid Google Tracking ID
+            # google_tracking_id:
+
+            # Build settings
+            markdown: kramdown
+            highlighter: rouge
+            permalink: pretty
+            paginate: 5
+            exclude: ["less","node_modules","Gruntfile.js","package.json","README.md"]
+
+            gems: [jekyll-paginate, jekyll-feed]
+        </code>
+    </pre>
+</div>
