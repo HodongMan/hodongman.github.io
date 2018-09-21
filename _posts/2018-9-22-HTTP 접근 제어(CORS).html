@@ -1,0 +1,78 @@
+---
+layout: post
+title:  "HTTP 접근 제어(CORS)"
+subtitle: "HTTP 접근 제어(CORS)가 무엇인지 알아보고, CORS에 대해 적절히 HTTP Request를 처리하기"
+date:   2018-9-22 10:45:13 -0400
+background: '/img/posts/06.jpg'
+---
+
+<p>
+    같은 출처가 아닌 다른 도메인으로부터 무언가가 요청될 경우 해당 자료는 cross-origin HTTP 요청에 의해 요청됩니다. 예를들어 여러 웹페이지는 이미지와 CSS, 그리고 각종 JS파일을 요청합니다. 이 경우에는 제한하는 정책이 없기 때문에 차단만 하지 않으면 해당 리소스를 제공받을 수 있습니다.
+<p>
+
+<h2 class="section-heading">Cross-Origin Resource Sharing</h2>
+
+<p>
+    하지만 XMLHttpRequest는 같은 출처, 즉 Same-Origin 을 따르기에 XMLHttpRequest을 사용하는 Web은 자신과 동일한 출처만 HTTP Request가 가능했습니다. 하지만 현대의 웹에서는 동일한 출처에서만 데이터를 주고받기에는 제약사항이 너무 큽니다. 그래서 이 경우에 보안적인 요소를 고려하면서도 HTTP Request가 가능하도록 하는 정책이 필요합니다. 그것이 CORS 입니다.
+</p>
+
+<p>
+    Cross-Origin Resource Sharing은 사용자의 요청이 실제로 서비스가 허가해도 되는지에 대한 규칙을 HTTP Header에 담아서 동작하게 합니다. 그래서 브라우저에서 내가 HTTP Header를 통해서 해당 규칙에 해당되는 지를 파악하는지 미리 확인할 필요가 있습니다. 이를 Preflight라고 합니다. Preflight는 HTTP Option Method를 통해서 확인이 되고 HTTP Header에 따라서 앞으로 보낼 XMLHttpRequest가 적합한지 판단받게 됩니다.
+</p>
+
+<p>
+    여러 HTTP Header가 사용되지만 이 중에서도 가장 많이 사용되는 것은 Access-Control-Allow-Origin(어떤 Origin을 허용할지), Access-Control-Allow-Methods(어떤 Method를 허용할지), Access-Control-Allow-Headers(요청이 성공할 경우 어떤 Header를 사용할 수 있는지)등의 HTTP Header입니다.
+</p>
+
+<pre>
+    <code>
+        package main
+
+        import (
+            "net/http"
+            "encoding/json"
+            "log"
+            "fmt"
+        )
+
+        type MessageJSONResponse struct {
+            result string `json:result`
+        }
+
+        func main() {
+            const port := 8080
+
+            http.HandleFunc("/cors", corsHandler)
+
+            log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
+        }
+
+        func corsHandler(w http.ResponseWriter, r *http.Request) {
+            
+            if r.Method == "OPTIONS" {
+                w.Header().Add("Access-Control-Allow-Origin", "*")
+                w.Header().Add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+                w.Header().Add("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+                w.WriteHeader(http.StatusNoContent)
+                return
+            }
+
+            result := MessageJSONResponse{result: "CORS Checking 성공"}
+            jsonResult, err := json.Marshal(result)
+
+            if err != nil {
+                panic("Data Error")
+            }
+
+            fmt.Fprint(w, string(jsonResult))
+        }
+    </code>
+</pre>
+
+<p>
+    간단하게 코드를 확인해보면 OPTIONS Method 일때 HTTP Header에 CORS 정책에 알맞은 정보를 담아서 요청한 곳에 전달합니다. 저 HTTP Header 정보에 따라 HTTP 요청이 진행될 것입니다. Browser가 Option Method로 정책에 관한 물어본 사항을 전달하게 되면 Browser가 다음에 진행될 XMLHttpRequest에 대해서는 잘 처리해 줄겁니다.
+</p>
+
+<p>
+    웹 개발자는 위와 같은 사실을 잘 알고 있어서 서비스의 보안 정책에 맞게 CROS가 잘 진행되도록 시나리오를 잘 짜야 할 것입니다.
+</p>

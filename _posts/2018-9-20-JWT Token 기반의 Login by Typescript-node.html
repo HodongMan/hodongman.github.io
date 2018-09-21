@@ -351,42 +351,38 @@ background: '/img/posts/06.jpg'
     두번쨰는 다른 API에서 이 정보를 확인해서 내가 적절한 사용자가 맞음을 확인해야 합니다. 이 과정은 Node의 Middleware를 통해서 할 수 있습니다.
 </p>
 
-<div class="highlighter-rouge">
-    <pre class="highlight">
-        <code>
-            import * as express from 'express';
-            import * as jwt from 'jsonwebtoken';
-            import * as expressJwt from 'express-jwt';
+<pre><code>
+        import * as express from 'express';
+        import * as jwt from 'jsonwebtoken';
+        import * as expressJwt from 'express-jwt';
+        
+        
+        const validateJwt: expressJwt.RequestHandler = expressJwt({
+            secret: 'signal', 
+        });
+        
+        export function isAuthenticated() {
             
+            return compose()
+                .use(function(req: express.Request, res: express.Response, next: express.NextFunction) {
+                    if (req.query && req.query.hasOwnProperty('access_token')) {
+                        req.headers.authorization = 'Bearer ' + req.query.access_token;
+                    }
+                    validateJwt(req, res, next);
+                })
+                .use(function(req: express.Request, res: express.Response, next: express.NextFunction) {
+                    // DB에서 필요한 데이터를 찾아서 req에 추가한다.
+                })
+        }
+        
+        export function signToken(id: string, name: string) {
             
-            const validateJwt: expressJwt.RequestHandler = expressJwt({
-                secret: 'signal', 
-            });
-            
-            export function isAuthenticated() {
-                
-                return compose()
-                    .use(function(req: express.Request, res: express.Response, next: express.NextFunction) {
-                        if (req.query && req.query.hasOwnProperty('access_token')) {
-                            req.headers.authorization = 'Bearer ' + req.query.access_token;
-                        }
-                        validateJwt(req, res, next);
-                    })
-                    .use(function(req: express.Request, res: express.Response, next: express.NextFunction) {
-                        // DB에서 필요한 데이터를 찾아서 req에 추가한다.
-                    })
-            }
-            
-            export function signToken(id: string, name: string) {
-                
-                return jwt.sign({
-                    _id: id, 
-                    name: name,
-                }, 'signal', { expiresIn: '2day'});
-            }                
-        </code>
-    </pre>
-</div>
+            return jwt.sign({
+                _id: id, 
+                name: name,
+            }, 'signal', { expiresIn: '2day'});
+        }               
+</code></pre>
 
 <p>
     isAuthenticated 함수를 Middleware로 두게 되면 해당 함수가 URL의 Querystring 중 access_token 항목에서 Token을 찾아서 JWT가 적합한지 확인합니다. 사실 HTTP Header에 넣는것과 Querystring에 넣는것은 별 차이는 없습니다. HTTP Header는 특수문자를 사용할 수 없고 Querystring은 URL에 직접적인 노출이 된다는 작은 차이점이 있지만 기능에는 전혀 문제가 없습니다. 이러한 과정을 통해 올바른 사용자면 다음 단계를 진행 할 수 있게 됩니다. 하지만 잘못된 사용자인 경우 HTTP 403 Error를 반환하게 되죠
