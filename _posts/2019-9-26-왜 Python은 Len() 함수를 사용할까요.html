@@ -1,0 +1,108 @@
+---
+layout: post
+title:  "왜 Python은 Len() 함수를 사용할까요"
+subtitle: "Python이 인터페이스 사용과 성능 사이에서 했던 고민을 알아보고 Python을 좀 더 잘 사용하기 위한 노력"
+date:   2018-9-26 18:45:13 -0400
+background: '/img/posts/06.jpg'
+---
+
+<p>
+    Python은 기본적으로 .length나 .lenght() 같은 Method(Class내의 정의되어 있는 Function)을 기본적으로 제공하지 않습니다. 대신 len()이라는 Built-in-Function을 지원합니다. 사실 파이썬은 귀도가 말했지만 객체 지향 언어이면서 함수가 First Class가 가능하도록 지원하기 떄문에 다른 형태로도 사용할 수 있습니다. 하지만 귀도는 파이썬은 객체 지향 언어라고 명확하게 밝혔습니다. 그런 관점에서 볼 때 len() 함수는 객체 지향 언어의 인터페이스 통일성에 있어서 과연 적합한지는 여러 이야기가 있을 수 있습니다. 그래서 len()의 정의를 찾아가면서 이 부분을 탐구해 보려고 합니다. 
+<p>
+
+<h2 class="section-heading">Built-in Functions</h2>
+
+<p>
+    Python의 기본 Library 정의는 https://github.com/python/cpython/tree/master/Lib 에 보면 쉽게 찾을 수 있습니다. 하지만 len()은 https://github.com/python/cpython/blob/master/Python/bltinmodule.c 이곳에 builtin_{functionname} 형태로 정의 되어 있습니다. 일단 코드 내용을 한번 살펴봅시다.
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            static PyObject *
+            builtin_len(PyObject *module, PyObject *obj)
+            /*[clinic end generated code: output=fa7a270d314dfb6c input=bc55598da9e9c9b5]*/
+            {
+                Py_ssize_t res;
+            
+                res = PyObject_Size(obj);
+                if (res < 0) {
+                    assert(PyErr_Occurred());
+                    return NULL;
+                }
+                return PyLong_FromSsize_t(res);
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    다른 Library와 다르게 C코드로 정의되어 있습니다. 코드를 살펴보면 길이를 찾는 핵심 코드는 PyObject_Size라는 함수일텐데요 이 함수를 찾아보겠습니다.
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            Py_ssize_t
+            PyObject_Size(PyObject *o)
+            {
+                PySequenceMethods *m;
+            
+                if (o == NULL) {
+                    null_error();
+                    return -1;
+                }
+            
+                m = o->ob_type->tp_as_sequence;
+                if (m && m->sq_length) {
+                    Py_ssize_t len = m->sq_length(o);
+                    assert(len >= 0 || PyErr_Occurred());
+                    return len;
+                }
+            
+                return PyMapping_Size(o);
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    sq_length 함수를 통해서 len을 결정하는 것을 알 수 있습니다. 사실 tp_as_sequence가 정의되지 않거나 sq_length의 값이 없거나(sq_length는 PyMappingMethods구조체의 함수 포인터 값입니다) 그려면 mp_length로 찾을 수도 있겠죠. Object의 Type에 따라 적합한 함수로 sq_length 함수의 값을 넣지만 대부분 Py_SIZE라는 함수를 통해서 len 값을 찾습니다.
+</p>
+
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                        
+            typedef struct _object {
+                _PyObject_HEAD_EXTRA
+                Py_ssize_t ob_refcnt;
+                struct _typeobject *ob_type;
+            } PyObject;
+
+            typedef struct {
+                PyObject ob_base;
+                Py_ssize_t ob_size; /* Number of items in variable part */
+            } PyVarObject;
+
+            #define Py_REFCNT(ob)           (((PyObject*)(ob))->ob_refcnt)
+            #define Py_TYPE(ob)             (((PyObject*)(ob))->ob_type)
+            #define Py_SIZE(ob)             (((PyVarObject*)(ob))->ob_size)
+        </code>
+    </pre>
+</div>
+
+<p>
+    Py_SIZE의 정체를 알아냈습니다. PyVarObject의 ob_size의 값을 반환하는 C로 define 선언되어 있는 매크로 함수 이네요. 찾아본 정보에 따르면 Python의 모든 객체 유형은 PyObject의 확장입니다. PyVarObject는 그 중에서도 ob_size field를 사용할 수 있는 PyObject의 확장입니다. 그래서 PyObject는 Py_PERCENT, Py_Type 그리고 Py_SIZE라는 매크로 함수를 사용할 수 있어야 해요.
+</p>
+
+<p>
+    따라서 len 함수를 사용하면 PyVarObject에 저장되어 있는 ob_size라는 구조체의 변수를 참조해서 바로 값을 가져 옵니다. 이러면 값을 저장할때는 몰라도 매번 길이를 계산할 필요 없이 상수 시간 안에 값을 가져올 수 있을 것입니다. 이런 방식으로 구현이 되어 있기 떄문에 다른 함수들에 비해 정말 빠른 시간으로 수행이 되겠네요. 사실 파이썬은 이런 식으로 Java 등의 다른 객체 지향 언어와 달리 성능을 좀 더 끌어낼 수 있는 방법에 대해 고민을 많이 한 흔적이 보입니다. 이것이 일관성을 조금 해치는 작업이 될 수 있더라도요.
+</p>
+
+<p>
+    제가 Python을 사용해서 무언가를 작업할 떄 항상 느끼는 고민은, 과연 속도 면에서 프로그램 작성자의 기대를 만족시켜 줄 수 있는지 여부입니다. 파이썬의 생산성을 너무 좋습니다. 하지만 성능은 그렇지 않죠. Numpy등을 보면 파이썬을 사용하더라도 성능에 대한 고민이 있다면 좋은 퍼포먼스를 보여줄 수 있다는 것을 증명합니다. 그래서 Python을 사용하는 사람은 항상 이러한 고민을 해야 할 것 같습니다. 이것이 또 일반 Python 사용자와 다른 차이점을 보여줄 수 있겠네요.
+</p>
+
+참조 : https://github.com/python/cpython / 책 - Fluent Python [Book] - O'Reilly Media
