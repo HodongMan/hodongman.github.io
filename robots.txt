@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: http://hodongman.github.io/sitemap.xml
