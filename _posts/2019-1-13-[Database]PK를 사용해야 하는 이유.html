@@ -1,0 +1,43 @@
+---
+layout: post
+title:  "Table 작성 시 PK를 무조건 사용해야 하는 이유"
+subtitle: "Primary Key가 어떤 역할을 하고 어떤 가치를 지니는 지에 대한 정리"
+date:   2019-1-13 21:41:13 -0400
+background: '/img/posts/04.jpg'
+---
+
+<p>
+    RDBMS의 Table에서 가장 먼저 고려하는, 개별 행을 검색하는 데 사용할 수있는 고유 한 키(Primary Key)에 대해 정리할 생각입니다. 기본키(Primary Key)는 시스템이 한 테이블에 있는 Row가 다른 Row와 구별되는 무언가를 가져야 하므로 이 역할을 수행할 수 있습니다. 기본키는 한 Row마다 유일해야 하며 NULL이 될 수 없어야 합니다.
+<p>
+
+<h2 class="section-heading">기본키가 있어야 하는 이유</h2>
+
+<p>
+    기본키가 없으면 일관성 없는 데이터가 반복적으로 쌓일 수 있기 때문에 쿼리 속도가 느리고, 원하지 않는 정보 조회 결과를 가져올 수 있습니다. 관계형 데이터베이스에서는 반드시 각 행이 고유하게 식별되어야 합니다. 이 규칙을 위반하면 더 이상 관계형이 아니며 데이터에서 모호함이 생길 수 있습니다. 아마 다른 사용자가 테이블을 참조할 경우 끔찍한 일이 발생할 수도 있겠네요. 이 부분은 중복 행을 생성하는 조인(JOIN) Query와 같은 부분애서 재앙과 같은 일입니다. 그리고 대부분의 경우 Primary Key를 기반으로 테이블의 행을 검색하거나 결합합니다.
+</p>
+
+<p>
+    예전에 저는 다른 엔지니어가 작업하는 것을 본 적이 있는데 그는 데이터를 온전히 통계용으로만 사용할 것이기 때문에 그리고 개별 데이터를 조회할 일이 없으므로 Cost를 조금이라도 줄이고자 Primary Key를 사용하지 않는 다고 했습니다. 하지만 이것은 매우 잘못된 사실입니다. Primary Key를 작성한다고 해서 성능에 악영항은 거의 없습니다. 정말 작은 Cost를 사용할 뿐이죠. 하지만 Priamry Key를 사용하지 않으면 성능 대가를 치루게 됩니다. 예를들어 MySQL의 InnoDB는 기본적으로 데이터를 저장하고 Indexing하기 위해 Primary Key를 요구합니다. 명시적인 PK가 없는 경우 InnoDB는 그 값을 생성합니다. 비록 사용자에게는 노출되지 않는다 하더라도. 그리고 분명한 것은 이 값은 Auto Increment INT 혹은 BIGINT보다 큰 값입니다. 물론 PK가 없다면 InnoDB는 UNIQUE인 모든 Column을 찾아서 index가 0인 Column을 사용할 수 있는 경우도 있습니다. 하지만 MySQL을 믿고 PK를 안쓰고 UNIQUE Column을 무조건 둔다? 이것이 합리적일까요? 저는 그렇게 생각하지 않습니다. 위 사실을 볼 때 PK를 설정하는 것이 제일 합리적인 것처럼 보입니다.
+</p>
+
+<p>
+    MySQL에서는 명시적으로 설정에서 아니다라고 하지 않는 이상 Primary Key는 Cluster Index입니다. 따라서 기본 키가 없는 테이블은 적합한 UNIQUE key를 만드는 것 외에 방법이 없습니다. 이런 상황일 경우 INDEX()가 하는 일은 오직 Secondary Index(Unclustered Index)밖에 없습니다. 심지어 SQL Server에서도 Primary Key를 정의할 떄 Default는 Clustered Index를 사용해서 Primary Key 제악 조건을 적용 합니다. 하지만 명시적으로 PRIMARY KEY NONCLUSTERED를 설정할 수도 있죠. SQL Server 에서는 PK와 Clustered Index가 동일하지 않을 수 있습니다. 이처럼 Database에 따라 다를 수 있긴 합니다. 확실한 건 Database에 따라 PK를 설정하지 않는 경우 데이터의 실제로 저장되는 정렬 순서를 보장할 수 없다는 점이겠죠. 저는 데이터를 조회할 때마다 Database가 모든 데이터를 조회하길 원하지 않습니다.
+</p>
+
+<h2 class="section-heading">기본 키의 조건</h2>
+
+<p>
+    기본 키의 조건은 다음과 같습니다. 1) 유일한 값을 가져야 한다. 2) NULL값을 가질 수 없다. 3) 변경될 수 있는 경우가 없어야 한다. 따라서 이 경우를 만족하는 1개 이상의 값을 Priarmy Key로 설정할 수 있습니다. 이러한 목표를 달성하는 가장 쉬운 방법은 의미 없는 숫자 데이터를 자동 생성(AUTO_INCREMENT, IDENTITY, Serial 등) 하는 방법입니다. 그리고 NULL값을 사용하지 않는 이유는 이 값이 무엇인지 모르기 때문입니다. 심지어 어떤 경우 NULL과 NULL은 서로 다른 값으로 일치하지 않는 경우가 생길 수도 있습니다. 굳이 NULL을 쓸 이유는 없습니다. NULL값을 피하는 것이 여러 모로 엔지니어의 건강 증진에 도움이 될 것입니다. 
+</p>
+
+<h2 class="section-heading">기본 키는 정수형 숫자 VS 문자열</h2>
+
+<p>
+    기본 키를 정수형 숫자로 할 것인지 문자열로 할 것인지에 대해서는 여러 논쟁이 있습니다. 이는 일단 엔진에 따라 다릅니다. SQL Server같은 경우 기본 키를 선택할 때 공백, 특수문자 또는 대문자가 없는 후보를 찾기 떄문입니다. 이는 정수형 숫자보다 힘들게 하고 오류 발생 확률이 높습니다. 그리고 Integer가 Character보다 빠르게 수행되는데 그 이유는 SQL Server는 Character를 ASCII로 수정하는 과정이 있기 때문입니다. Fixed-length Character의 경우 Variable-length Character보다 수행 속도가 빠릅니다. 왜냐하면 Variable-length Character의 경우 압축을 해제하는 시간이 필요하기 때문입니다. Bytes수는 사실 큰 의미는 없습니다. 왜냐하면 현재는 공간이라는 데이터 값은 매우 싸기 때문입니다. 문자열로 할 경우 JOIN 횟수는 줄어들 가능성이 있습니다. Name을 가져오기 위해 JOIN을 할 필요가 없을 수 있기 떄문입니다. JOIN은 매우 비싼 연산입니다.
+</p>
+
+<h2 class="section-heading">정리</h2>
+
+<p>
+    정리는 간단합니다. 사용자가 정수형 숫자던 문자열 이던 여러분은 반드시 Primary Key를 지정해야 한다는 점입니다. 반드시 유일한 값으로
+</p>
