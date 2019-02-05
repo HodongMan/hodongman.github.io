@@ -1,0 +1,29 @@
+---
+layout: post
+title:  "HTTP3란 무엇인가"
+subtitle: "HTTP3에 대한 소개"
+date:   2019-2-6 00:12:13 -0400
+background: '/img/posts/02.jpg'
+---
+
+<p>
+    구글의 SPDY 기술이 HTTP / 2의 기반 기술 입니다. 그 이후에 HTTP-over-QUIC 프로토콜은 HTTP / 3로 이름을 바꾸고 HTTP의 세 번째 버전이 될 것입니다. HTTP-over-QUIC는 기본 기술로 TCP (전송 제어 프로토콜) 대신 Google의 QUIC를 사용하는 HTTP 프로토콜을 다시 작성한 것입니다.  
+<p>
+
+<h2 class="section-heading">HTTP와 QUIC</h2>
+
+<p>
+    발표한 내용에 따르면 QUIC (Quick UDP Internet Connections)는 TCP와 비교하여 대기 시간을 줄이는 새로운 전송 장치입니다. 표면적으로 QUIC는 UDP에서 구현 된 TCP + TLS + HTTP / 2와 매우 유사합니다. TCP는 운영 체제 커널 및 middlebox 펌웨어에 구현되므로 TCP를 크게 변경하는 것은 불가능합니다. 그러나 QUIC는 UDP 위에 구축되기 때문에 이러한 제한이 없습니다.
+<p>
+
+<p>
+    기존의 HTTP 프로토콜과 가장 다른 점은 TCP의 대체입니다. TCP는 패킷의 손실이 있는 상황에서 매우 유용합니다. 하지만 연결에 대한 지연은 아쉽게도 나아지지 않았습니다. 그러한 면에서 TCP의 3-handshake보다 UDP위에 새로 구현한 QUIC의 3-handshake가 초기 연결 설정을 더 빠르고 간결하게 수행합니다. QUIC이 엔드포인트 인증은 물론 암호화도 함께 진행하더라도 말입니다.
+<p>
+
+<p>
+    HTTP2는 속도 문제(HTTP의 head-of-line blocking)를 전송 계층 안에서 해결하기 위해 HTTP 안의 Request와 Response를 Multiplexing(TCP 연결의 다중화)했습니다. 그래서 HTTP2는 HTTP1.1에 비해 6가지 이상의 요청일 경우 웹 페이지 랜더링이 느려지는 문제를 효과적으로 대체 했습니다. 하지만 장애가 발생하여 손실된 데이터가 있을 경우 모든 연결이 패킷 손실에 영향을 받습니다(TCP의 head-of-line blocking). QUIC은 추가 연결이 있다 하더라도 handshake를 추가할 필요가 없고 혼잡 상태가 공유되니까 패킷 손실이 다른 연결에 영향을 미칠 수 없습니다. 하지만 장점이 있으면 단점이 있는걸까요. NAT 라우터가 UDP기반의 QUIC을 아직 알지 못하기 때문에 기존처럼 SYN, ACK및 FIN 패킷을 감지하여 새 연결에 관한 정보를 탐색할 수 없습니다. 이는 위 프로토콜을 사용하는 환경이 제한적임을 알 수 있습니다.
+<p>
+
+<p>
+    결론 : SPDY와 HTTP2를 공부해서 적용합시다. HTTP3는 조금 더 시간이 필요해보여요. 지금은 간략하게 소개했지만 나중에 제대로 정리
+<p>
