@@ -1,0 +1,25 @@
+---
+layout: post
+title:  "Windows Kernel Object 윈도우 커널 오브젝트"
+subtitle: "윈도우 커널 오브젝트에 관한 정리"
+date:   2019-5-1 16:12:13 -0500
+background: '/img/posts/01.jpg'
+---
+
+<h2 class="section-heading">Windows Kernel Object</h2>
+
+<p>
+    윈도우 운영체제는 다양한 형태의 커널 개체를 생성하고 조작하고 종료 합니다. 프로그래머는 윈도우 운영체제에서 여러 가지 함수를 통해서 다양한 커널 개체를 만들 수 있습니다. 그러면 윈도우 운영체제는 커널에 메모리를 할당해서 커널 개체를 만듭니다. Windows 커널 모드 개체 관리자 구성 요소는 개체를 관리 합니다 . 파일, 장치, 동기화 메커니즘, 레지스트리 키 등은 모두 커널 모드에서 개체로 표시됩니다. 각 개체에는 정보가 표시되는 Header와 Body로 구성되어 있습니다. 프로그래머는 핸들 값을 얻어다가 참조를 통해서만 개체를 사용할 수 있습니다. 그래서 개체를 참조하여 사용자 모드에서 핸들을 가져올 수 있습니다. 개체를 참조하여 핸들을 가져오는 방식은 커널 개체를 생성하는 함수를 호출하면 함수는 개체를 식별 하는 핸들을 반환 합니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            django-admin.py startproject config .
+        </code>
+    </pre>
+</div>
+
+<p>
+    작성중....
+<p>

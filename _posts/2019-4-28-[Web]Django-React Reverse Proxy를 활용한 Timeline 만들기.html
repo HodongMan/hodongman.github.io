@@ -131,7 +131,129 @@ background: '/img/posts/05.jpg'
 </div>
 
 <p>
-    generics.ListCreateAPIView는 데이터의 list를 제공(HTTP GET Method)와 데이터 생성(HTTP POST method)의 기본적인 역할을 사용할 수 있는 믹스인 클래스 입니다. 그리고 RetrieveUpdateDestroyAPIView는 데이터 SELECT(HTTP GET Method)와 데이터 수정(HTTP UPDATE Method)와 데이터 삭제(HTTP DELETE Method)의 기본 기능을 제공합니다. 이것은 Django의 기본 클래스 기반 뷰를 REST 기반으로 사용하기 위한 Wrapper Class입니다. 따라서 이처럼 간단한 경우에는 매우 쉽게 사용할 수 있지만 조금만 복잡해지면 내부 구조를 파악해 수정할 정도로 복잡한 경우에는 좋지 않습니다. 
+    generics.ListCreateAPIView는 데이터의 list를 제공(HTTP GET Method)와 데이터 생성(HTTP POST method)의 기본적인 역할을 사용할 수 있는 믹스인 클래스 입니다. 그리고 RetrieveUpdateDestroyAPIView는 데이터 SELECT(HTTP GET Method)와 데이터 수정(HTTP UPDATE Method)와 데이터 삭제(HTTP DELETE Method)의 기본 기능을 제공합니다. 이것은 Django의 기본 클래스 기반 뷰를 REST 기반으로 사용하기 위한 Wrapper Class입니다. 따라서 이처럼 간단한 경우에는 매우 쉽게 사용할 수 있지만 조금만 복잡해지면 내부 구조를 파악해 수정할 정도로 복잡한 경우에는 좋지 않습니다. 따라서 용도를 잘 확인해서 사용하면 더 적은 코드로 일할 수 있습니다. 저는 개인적으로 다양한 도구들을 사용하기에 문제가 없다면 최대한 활용하는 것이 좋다고 생각합니다.
+<p>
+
+<p>
+    그 다음에 API의 URL을 결정하는 부분입니다. Reverse Proxy 방식으로 서버를 구성하려면 URL를 통해 정확한 기능 구분이 중요합니다. 이것은 사람 뿐만 아니라 시스템도 URL을 통해 어떤 기능을 하는 서버인지 알 수 있어야 합니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                from django.urls import path
+                from .views import TimelineList, TimelineDetail
+
+                urlpatterns = [
+                    path("timeline/", TimelineList.as_view(), name=TimelineList.name),
+                    path("timeline/<int:pk>/", TimelineDetail.as_view(), name=TimelineDetail.name),
+                ]
+        </code>
+    </pre>
+</div>
+
+<p>
+    Django 2.0부터 사용가능한 django.urls의 path를 활용하면 쉽게 urlpatterns를 작성할 수 있습니다
+<p>
+
+<p>
+    다음은 Settings에 우리가 사용하는 package를 등록하고 실제 timeline app을 django에 등록시켜서 우리가 작성한 코드를 구동할 수 있게끔 하는 설정을 추가할 것입니다. config/settings.py의 INSTALLED_APPS을 다음과 같이 수정합니다. 그리고 DATABASES도 다음과 같이 수정합니다. 아마 기본적으로 sqlite3를 사용하게끔 설정되어 있을 겁니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                INSTALLED_APPS = [
+                    'django.contrib.admin',
+                    'django.contrib.auth',
+                    'django.contrib.contenttypes',
+                    'django.contrib.sessions',
+                    'django.contrib.messages',
+                    'django.contrib.staticfiles',
+                    'rest_framework',
+                    'timeline.apps.TimelineConfig',
+                ]
+                .....
+
+                DATABASES = {
+                    'default': {
+                        'ENGINE': 'django.db.backends.mysql',
+                        'NAME': 'tiemline', # DB 이름을 적어주세요
+                        'USER' : 'root', # DB 계정을 적어주세요 난 임의로 root라 해야지
+                        'PASSWORD' : '1234', #DB 비밀번호를 적어주세요 난 임의로 1234라고 해야지
+                        'HOST' : '127.0.0.1',
+                        'PORT' : '3306'
+                    }
+                }
+
+        </code>
+    </pre>
+</div>
+
+<p>
+    그리고 config/urls.py를 다음과 같이 수정합니다. 이 작업은 아까 작성했던 timeline의 urls.py를 사용할 수 있게끔 등록하는 것입니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                from django.contrib import admin
+                from django.urls import path, include
+
+                urlpatterns = [
+                    path('admin/', admin.site.urls),
+                    path("api/", include('timeline.urls'))
+                ]
+        </code>
+    </pre>
+</div>
+
+<p>
+    django admin을 사용하지 않을 거긴 하지만 딱히 제외 이유는 없어서 남겨두었습니다. 이러면 남은 과정은 Database를 생성하고 마이그레이션 하는 과정입니다. 마이그레이션을 통해서 ORM 시스템에게 DB Table을 생성해달라고 요청할 수 있습니다. 그러면 코드에 Mapping되는 DB Table 형태가 생성이 됩니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                DROP DATABASE IF EXIST TIMELINE;
+
+                CREATE DATABASE TIMELINE CHARACTER SET UTF8
+        </code>
+    </pre>
+</div>
+
+<p>
+    다음과 같이 하면 기존의 TIMELINE이름의 DATABASE가 있으면 삭제하고 TIMELINE이라는 이름의 CHARACTER SET이 UTF8 속성을 가진 DATABASE가 생성이 됍니다. 그 다음에 마이그레이션을 요청하는 명령어를 입력하면 됍니다
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                python manage.py makemigrations
+
+                python manage.py migrate
+        </code>
+    </pre>
+</div>
+
+<p>
+    다음과 같이 명령어를 입력하면 Django가 ORM이나 Migrate에 필요한 기본 Table을 만들고 그 다음에 Model에 해당하는 Table을 만들 것입니다. 이름을 따로 설정하기 않았기 떄문에 timeline_timeline이라는 Table 이름을 가지고 생성할 것입니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                python manage.py runserver 0.0.0.0:8000
+        </code>
+    </pre>
+</div>
+
+<p>
+    다음과 같이 명령어를 입력하면 드디어 Django가 8000번 포트에다가 서버를 실행시킬 겁니다. 이제 8000번 포트로 URL에 맞게 요청을 보내면 응답을 받을 수 있습니다.
+<p>
+
+<p>
+    다음은 Nginx를 통해서 HTTP Reverse Proxy서버를 실행할 것입니다. 
 <p>
 
 <p>
