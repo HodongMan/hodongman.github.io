@@ -1,0 +1,573 @@
+---
+layout: post
+title:  "C만으로 허접한 뱀게임 만들기"
+subtitle: "Library Framework 없이 밑바닥부터 무언가를 진행함의 소중함"
+date:   2019-5-6 01:12:13 -0500
+background: '/img/posts/02.jpg'
+---
+
+<h2 class="section-heading">C만으로 허접한 뱀게임 만들기</h2>
+
+<p>먼저, 간단하면서도 꽤 쓸만한 게임을 만드는것은 어렵지 않습니다. 실제로 Unity나 C#, 혹은 Unreal Engine을 활용하면 코드 몇줄 작성하지 않아도 꽤 그럴듯한 간단한 게임을 제작할 수 있습니다. 하지만 저는 이런 도구나 Framework 등을 사용하지 않고 허접하더라도 직접 맨 밑바닥 부터 한번 만들어 보자라는 생각을 했었고 실제로 도전해본 경험을 소개하겠습니다.</p>
+
+<h2 class="section-heading">Map 만들기</h2>
+
+<p>간단한 그림이라 하더라도 모든 것을 printf만으로 작업하는 것은 매우 슬픈 일입니다. 그래서 SetConsoleCursorPosition의 도움을 받아서 쉽게 Cursor를 이동해서 그림을 그릴 수 있도록 했습니다. ( _ _ ) 이 부분만 사용했어요. </p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                #ifndef _MAP_H__
+                #define _MAP_H__
+
+                #include&#60;conio.h&#62;
+                #include&#60;windows.h&#62;
+                #include&#60;time.h&#62;
+
+                #define BACKGROUNDLEFTUPXPOS 9 
+                #define BACKGROUNDLEFTUPYPOS 2
+                #define BACKGROUNDRIGHTDOWNXPOS 60
+                #define BACKGROUNDRIGHTDOWNYPOS 26
+
+
+                typedef struct _item {
+
+                    unsigned int xPos;
+                    unsigned int yPos;
+
+                }Item;
+
+                typedef struct _map {
+
+                    Item* item;
+                    unsigned int total_score;
+
+                }Map;
+
+                void moveCursor(int xPos, int yPos);
+                void drawMap();
+                void createItemInMap(Map* map);
+
+                Map * initializeMap();
+                Item* createItem(int xPos, int yPos);
+                void setScoreInScreen(Map* map, int score);
+
+
+                static int makeOddNumber(int number);
+
+
+                #endif
+        </code>
+    </pre>
+</div>
+
+<p>맵의 크기를 #define으로 정의를 하고 실제 map과 map에 출현하는 item을 struct로 정의 했습니다. map을 초기화하고 그리고 printf로 map을 그리는 역할, cursor를 옮기는 역할, 그리고 맵에 출현하는 item을 생성하는 역할을 하는 곳입니다.</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            #include&#60;stdio.h&#62;
+            #include&#60;stdlib.h&#62;
+            #include&#60;time.h&#62;
+
+            #include"map.h"
+
+            inline void moveCursor(int xPos, int yPos) {
+
+                COORD position;
+                position.X = xPos;
+                position.Y = yPos;
+                SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), position);
+            }
+
+            void drawMap() {
+
+                int xPos, yPos;
+
+                moveCursor(BACKGROUNDLEFTUPXPOS, BACKGROUNDLEFTUPYPOS);
+
+                printf("┏");
+                for (xPos = BACKGROUNDLEFTUPXPOS + 1; xPos < (BACKGROUNDRIGHTDOWNXPOS * 2) - 10; xPos++) {
+                    printf("━");
+                }
+
+                printf("┓");
+                moveCursor(BACKGROUNDLEFTUPXPOS, BACKGROUNDLEFTUPYPOS);
+
+                for (yPos = BACKGROUNDLEFTUPYPOS + 1; yPos < BACKGROUNDRIGHTDOWNYPOS; yPos++) {
+                    moveCursor(BACKGROUNDLEFTUPXPOS, yPos);
+                    printf("┃");
+                }
+                moveCursor(BACKGROUNDLEFTUPXPOS, BACKGROUNDRIGHTDOWNYPOS);
+                printf("┗");
+
+                for (xPos = BACKGROUNDLEFTUPXPOS + 1; xPos < (BACKGROUNDRIGHTDOWNXPOS * 2) - 10; xPos++) {
+                    printf("━");
+                }
+
+                printf("┛");
+
+                for (yPos = BACKGROUNDRIGHTDOWNYPOS - 1; yPos > BACKGROUNDLEFTUPYPOS; yPos--) {
+                    moveCursor(BACKGROUNDRIGHTDOWNXPOS * 2 - BACKGROUNDLEFTUPXPOS - 1, yPos);
+                    printf("┃");
+                }
+                
+            }
+
+            void createItemInMap(Map* map) {
+
+                unsigned int xPos, yPos;
+                
+                srand(time(NULL));
+
+                xPos = makeOddNumber((rand() % (BACKGROUNDRIGHTDOWNXPOS * 2 - 20)) + BACKGROUNDLEFTUPXPOS);
+                yPos = makeOddNumber((rand() % (BACKGROUNDRIGHTDOWNYPOS)) + BACKGROUNDLEFTUPYPOS);
+
+                map->item = createItem(xPos, yPos);
+                
+            }
+
+            static inline int makeOddNumber(int number) {
+                
+                if (number % 2 == 0) {
+                    return number - 1;
+                }
+
+                return number;
+            }
+
+            Item* createItem(int xPos, int yPos) {
+
+                Item* item;
+
+                if ((item = (Item*)malloc(sizeof(Item))) == NULL) {
+                    fprintf(stderr, "SYSTEM ERROR");
+                    return NULL;
+                }
+                item->xPos = xPos;
+                item->yPos = yPos;
+                moveCursor(xPos, yPos);
+                printf("○");
+                moveCursor(0, 0);
+
+                return item;
+            }
+
+            Map* initializeMap() {
+                
+                Map* map;
+
+                if ((map = (Map*)malloc(sizeof(Map))) == NULL) {
+                    fprintf(stderr, "SYSTEM ERROR");
+                    return NULL;
+                }
+                map->item = NULL;
+                map->total_score = 0;
+
+                return map;
+            }
+
+            void setScoreInScreen(Map* map, int score) {
+                
+                moveCursor(72, 27);
+                map->total_score += score;
+                printf("현재 점수는 %d 입니다.", map->total_score);
+
+            }  
+        </code>
+    </pre>
+</div>
+
+<p>moveCursor는 x값과 y값을 받아서 SetConsoleCursorPosition을 사용하기 위한 함수 입니다. initializeMap을 통해 map을 할당하고 점수 데이터를 초기화 합니다. 그리고 drawMap 함수를 통해 일일이 map을 그려줍니다. createItemInMap은 createItem을 호출해서 메모리를 할당하고 데이터를 초기화 합니다. 그리고 임의로 선정된 위치에 item을 set합니다. setScoreInScreen은 map에 점수 데이터를 set하고 화면에 표시합니다.</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            #include&#60;stdio.h&#62;
+            #include&#60;stdlib.h&#62;
+            #include&#60;time.h&#62;
+
+            #include"map.h"
+
+            inline void moveCursor(int xPos, int yPos) {
+
+                COORD position;
+                position.X = xPos;
+                position.Y = yPos;
+                SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), position);
+            }
+
+            void drawMap() {
+
+                int xPos, yPos;
+
+                moveCursor(BACKGROUNDLEFTUPXPOS, BACKGROUNDLEFTUPYPOS);
+
+                printf("┏");
+                for (xPos = BACKGROUNDLEFTUPXPOS + 1; xPos < (BACKGROUNDRIGHTDOWNXPOS * 2) - 10; xPos++) {
+                    printf("━");
+                }
+
+                printf("┓");
+                moveCursor(BACKGROUNDLEFTUPXPOS, BACKGROUNDLEFTUPYPOS);
+
+                for (yPos = BACKGROUNDLEFTUPYPOS + 1; yPos < BACKGROUNDRIGHTDOWNYPOS; yPos++) {
+                    moveCursor(BACKGROUNDLEFTUPXPOS, yPos);
+                    printf("┃");
+                }
+                moveCursor(BACKGROUNDLEFTUPXPOS, BACKGROUNDRIGHTDOWNYPOS);
+                printf("┗");
+
+                for (xPos = BACKGROUNDLEFTUPXPOS + 1; xPos < (BACKGROUNDRIGHTDOWNXPOS * 2) - 10; xPos++) {
+                    printf("━");
+                }
+
+                printf("┛");
+
+                for (yPos = BACKGROUNDRIGHTDOWNYPOS - 1; yPos > BACKGROUNDLEFTUPYPOS; yPos--) {
+                    moveCursor(BACKGROUNDRIGHTDOWNXPOS * 2 - BACKGROUNDLEFTUPXPOS - 1, yPos);
+                    printf("┃");
+                }
+                
+            }
+
+            void createItemInMap(Map* map) {
+
+                unsigned int xPos, yPos;
+                
+                srand(time(NULL));
+
+                xPos = makeOddNumber((rand() % (BACKGROUNDRIGHTDOWNXPOS * 2 - 20)) + BACKGROUNDLEFTUPXPOS);
+                yPos = makeOddNumber((rand() % (BACKGROUNDRIGHTDOWNYPOS)) + BACKGROUNDLEFTUPYPOS);
+
+                map->item = createItem(xPos, yPos);
+                
+            }
+
+            static inline int makeOddNumber(int number) {
+                
+                if (number % 2 == 0) {
+                    return number - 1;
+                }
+
+                return number;
+            }
+
+            Item* createItem(int xPos, int yPos) {
+
+                Item* item;
+
+                if ((item = (Item*)malloc(sizeof(Item))) == NULL) {
+                    fprintf(stderr, "SYSTEM ERROR");
+                    return NULL;
+                }
+                item->xPos = xPos;
+                item->yPos = yPos;
+                moveCursor(xPos, yPos);
+                printf("○");
+                moveCursor(0, 0);
+
+                return item;
+            }
+
+            Map* initializeMap() {
+                
+                Map* map;
+
+                if ((map = (Map*)malloc(sizeof(Map))) == NULL) {
+                    fprintf(stderr, "SYSTEM ERROR");
+                    return NULL;
+                }
+                map->item = NULL;
+                map->total_score = 0;
+
+                return map;
+            }
+
+            void setScoreInScreen(Map* map, int score) {
+                
+                moveCursor(72, 27);
+                map->total_score += score;
+                printf("현재 점수는 %d 입니다.", map->total_score);
+
+            }  
+        </code>
+    </pre>
+</div>
+
+<h2 class="section-heading">Item을 먹을 수 있는 Snake 생성</h2>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            #ifndef _SNAKE_H__
+            #define _SNAKE_H__
+
+            #include"view.h"
+
+            #define LEFT 75
+            #define RIGHT 77
+            #define UP 72
+            #define DOWN 80
+            #define ESC 27
+            #define PAUSE 112
+
+            typedef struct _snakeElem{
+
+                unsigned int xPos;
+                unsigned int yPos;
+                struct _snakeElem* prev;
+                struct _snakeElem* next;
+
+                void (*moveTo)(struct _snakeElem*);
+
+            }snakeElem;
+
+            typedef struct {
+
+                snakeElem* head;
+                snakeElem* tail;
+
+            }Snake;
+
+            Snake* initializeSnake();
+            snakeElem* makeSnakeElem(int xPos, int yPos);
+            void moveSnake(snakeElem* snake);
+            int isSnakeInTheMap(snakeElem* snake);
+
+            void getItemBySnake(Snake* snake, Map* map);
+
+            static inline int hasNextSnake(snakeElem* snake);
+            static inline void  addSnakeNext(Snake* snake);
+
+            static inline void moveUp(snakeElem * snake);
+            static inline void moveDown(snakeElem * snake);
+            static inline void moveLeft(snakeElem * snake);
+            static inline void moveRight(snakeElem * snake);
+
+
+            #endif  
+        </code>
+    </pre>
+</div>
+
+<p>Snake는 snakeElem으로 구성된 snakeElem struct의 모임입니다. snakeElem은 position 정보와 prev와 next snakeElem의 정보를 가지고 있고 어떻게 움직여야 하는지에 대한 정보가 담긴 함수 포인터를 가지고 있습니다. 그래서 Snake struct에 header와 tail elem 정보만 기록해 놓고 작동하는 linkedlist 형태로 되어 있습니다.</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            #include&#60;windows.h&#62;
+            #include"snake.h"
+
+            snakeElem * makeSnakeElem(int xPos, int yPos) {
+
+                snakeElem* snake;
+                
+                if ((snake = (snakeElem*)malloc(sizeof(snakeElem))) == NULL) {
+                    fprintf(stderr, "SYSTEM ERROR");
+                    return NULL;
+                }
+                snake->xPos = xPos;
+                snake->yPos = yPos;
+                snake->prev = NULL;
+                snake->next = NULL;
+                moveCursor(snake->xPos, snake->yPos);
+
+                printf("■");
+                snake->moveTo = moveLeft;
+                return snake;
+            }
+
+            Snake* initializeSnake() {
+                
+                Snake * snake;
+
+                if ((snake = (Snake*)malloc(sizeof(Snake))) == NULL) {
+                    fprintf(stderr, "SYSTEM ERROR");
+                    return NULL;
+                }
+                snakeElem* firstSnakeElem = makeSnakeElem(BACKGROUNDRIGHTDOWNXPOS + 1, BACKGROUNDRIGHTDOWNYPOS / 2);
+                snake->head = firstSnakeElem;
+                snake->tail = firstSnakeElem;
+
+                return snake;
+            }
+
+
+            void moveSnake(snakeElem * snake) {
+
+                int pressed_key;
+                snakeElem* temp;
+
+                
+                if (_kbhit()) {
+                    pressed_key = _getch();
+                    if (pressed_key == 224 || pressed_key == 0) {
+                        pressed_key = _getch();
+                        switch (pressed_key) {
+
+                        case LEFT:
+                            snake->moveTo = moveLeft;
+                            break;
+                        case RIGHT:
+                            snake->moveTo = moveRight;
+                            break;
+                        case UP:
+                            snake->moveTo = moveUp;
+                            break;
+                        case DOWN:
+                            snake->moveTo = moveDown;
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                    else {
+
+                    }
+                }
+                else {
+
+                    
+                    snake->moveTo(snake);
+                    Sleep(100);
+                }
+                
+            }
+
+            int isSnakeInTheMap(snakeElem* snake) {
+
+                if ((snake->xPos >= (BACKGROUNDRIGHTDOWNXPOS * 2 - 10)) || (snake->xPos <= BACKGROUNDLEFTUPXPOS)) {
+                    return FALSE;
+                }
+                else if ((snake->yPos >= BACKGROUNDRIGHTDOWNYPOS) || (snake->yPos <= BACKGROUNDLEFTUPYPOS)) {
+                    return FALSE;
+                }
+                return TRUE;
+            }
+
+            void getItemBySnake(Snake* snake, Map* map) {
+
+                if ((snake->head->xPos == map->item->xPos) && (snake->head->yPos == map->item->yPos)) {
+                    setScoreInScreen(map, 30);
+                    free(map->item);
+                    addSnakeNext(snake);
+                    createItemInMap(map);
+                }
+            }
+
+            static inline void addSnakeNext(Snake* snake) {
+                
+                snakeElem* newSnake;
+                snakeElem* temp;
+
+                if ((newSnake = (snakeElem*)malloc(sizeof(snakeElem))) == NULL) {
+                    fprintf(stderr, "SYSTEM ERROR");
+                    return;
+                }
+
+                snake->tail->next = newSnake;
+                newSnake->prev = snake->tail;
+                newSnake->next = NULL;
+                snake->tail = newSnake;
+
+                newSnake->moveTo = newSnake->prev->moveTo;
+                newSnake->xPos = newSnake->prev->xPos;
+                newSnake->yPos = newSnake->prev->yPos;
+
+                /*
+                temp = snake->head;
+                while (hasNextSnake(temp)) {
+                
+                    temp->moveTo(temp);
+                    temp = temp->next;
+                }
+
+                */
+
+            }
+
+            static inline int hasNextSnake(snakeElem* snake) {
+                
+                if (snake->next != NULL) {
+                    return TRUE;
+                }
+
+                return FALSE;
+            }
+
+            static inline void moveUp(snakeElem * snake) {
+                moveCursor(snake->xPos, snake->yPos);
+                printf("  ");
+                snake->yPos -= 1;
+                moveCursor(snake->xPos, snake->yPos);
+                printf("■");
+            }
+
+            static inline void moveDown(snakeElem * snake) {
+                moveCursor(snake->xPos, snake->yPos);
+                printf("  ");
+                snake->yPos += 1;
+                moveCursor(snake->xPos, snake->yPos);
+                printf("■");
+            }
+
+            static inline void moveRight(snakeElem * snake) {
+                moveCursor(snake->xPos, snake->yPos);
+                printf("  ");
+                printf("■");
+                snake->xPos += 2;
+                moveCursor(snake->xPos, snake->yPos);
+            }
+
+            static inline void moveLeft(snakeElem * snake) {
+                moveCursor(snake->xPos, snake->yPos);
+                printf("  ");
+                snake->xPos -= 2;
+                moveCursor(snake->xPos, snake->yPos);
+                printf("■");
+            }  
+        </code>
+    </pre>
+</div>
+
+<p></p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            #include"view.h"
+            #include"snake.h"
+            
+            int main()
+            {
+                Snake* snake = initializeSnake();
+                Map* map = initializeMap();
+            
+                drawMap();
+            
+                createItemInMap(map);
+                setScoreInScreen(map, 0);
+            
+                while (TRUE) {
+                    moveSnake(snake->head);
+                    
+                    if ( FALSE == isSnakeInTheMap(snake->head)) {
+                        break;
+                    }
+            
+                    getItemBySnake(snake, map);
+                }
+            
+                return 0;
+            }
+                  
+        </code>
+    </pre>
+</div>
+
+<p>Main함수에서 loop를 돌면서 snake를 움직이게 하고 아이템을 얻을 수 있는 상황인지 체크합니다. 그리고 그에 맞는 처리를 도와주죠. 두 번째로 snake가 더 이상 있을 수 없는 조건(맵 탈출)을 하면 게임을 종료 하게 됍니다.</p>
+
+<h2 class="section-heading">저만의 프로그래밍 연구법</h2>
+
+<p>저는 프로그래밍을 연구할 때 위의 예시처럼 하도록 마음 먹었습니다. 프레임워크나 라이브러리를 잘 다루는 것이 해당 프로그래밍과 원리를 이해했다는 것을 보장하지 않습니다. 그리고 그것은 프로그래밍의 기본기에 해당되지 않는다고 믿고 있습니다. 축구 선수들도 가장 기본이 되는 패스, 드리블, 체력, 빌드업 등에 가장 많은 시간을 투자하는 것처럼 프로그래밍도 반드시 그래야 한다고 저는 믿습니다.<br/>그래서 저는 위의 코드는 남 보여주기 어려울만큼 수준이 낮은 코드지만 </p>

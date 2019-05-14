@@ -146,7 +146,7 @@ background: '/img/posts/05.jpg'
 
                 urlpatterns = [
                     path("timeline/", TimelineList.as_view(), name=TimelineList.name),
-                    path("timeline/<int:pk>/", TimelineDetail.as_view(), name=TimelineDetail.name),
+                    path("timeline/&#60;int:pk>&#62;", TimelineDetail.as_view(), name=TimelineDetail.name),
                 ]
         </code>
     </pre>
