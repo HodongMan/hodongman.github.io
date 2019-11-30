@@ -1,0 +1,89 @@
+---
+layout: post
+title:  "Java Finalize 함수"
+subtitle: "GC의 작동이 Class에 미치는 영향"
+date:   2019-11-30 11:39:27 -0500
+background: '/img/posts/02.jpg'
+---
+
+<h2 class="section-heading">Finalize()에 관한 고찰</h2>
+
+<p>
+    Class는 Constructor(생성자)와 Destructor(소멸자)에 라고 칭하는 특수한 상황에서 호출되는 함수가 있습니다. 이름과 동일하게 Constructor는 Class를 생성할 때 자동으로 호출되는 함수이고, Destructor는 Class를 소멸할때 자동으로 호출되는 함수입니다.
+<p>
+
+<p>
+    어떠한 Class는 생성과 동시에 Resource를 획득을 해서 그것을 유지하고 종료하는 시점에 반납하는 형태를 보여줄 수 있습니다. 해당 Class가 살아만 있다면 Resource와 그에 관련된 Handler는 유효하다는 것이 보장되고 종료시 반납되는 해당 방법은 코드를 작성하는 사람의 입장에서 보면 자동으로 Resource를 관리한다고 볼 수도 있습니다. 이러한 방법을 RAII(Resource Acquisition is Initialization) 패턴이라고 합니다. 간단한 예시를 C++ 코드를 통해서 알아볼 수 있습니다
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                template<typename Locker>
+                class LockerSafeGuard
+                {
+                    LockerSafeGuard( Locker& locker )
+                        : m_locker( &locker )
+                    {
+                        locker->lock();
+                    }
+
+                    ~LockerSafeGuard( void )
+                    {
+                        locker->unlock();
+                    }
+
+                    ___forceinline bool isLocked( void ) const noexcept
+                    {
+                        return nullptr != m_locker;
+                    }
+                
+                    private:
+                    Locker*    m_locker;
+                };
+        </code>
+    </pre>
+</div>
+
+<p>
+    이러한 방식으로 Resource의 생성, 사용과 반납을 Class의 수명과 단단히 연관지을 수 있습니다. C++ 에서 해당 방법이 가능한 것은 Class의 메모리 관리는 전적으로 프로그래머 코드에게 달려 있기 때문입니다.
+</p>
+
+<p>
+    Java에서는 Resource를 정리할 수 있는 Method가 있는데 Finalize라고 합니다.
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            Finalization is a feature of the Java programming language that allows you to perform postmortem cleanup on objects that the garbage collector has found to be unreachable. It is typically used to reclaim native resources associated with an object. Here's a simple finalization example:
+            
+            public class Image1 {
+                    // pointer to the native image data
+                    private int nativeImg;
+                    private Point pos;
+                    private Dimension dim;
+
+                    // it disposes of the native image;
+                    // successive calls to it will be ignored
+                    private native void disposeNative();
+                    public void dispose() { disposeNative(); }
+                    protected void finalize() { dispose(); }
+
+                    static private Image1 randomImg;
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    Oracle 홈페이지에서는 위와 같이 사용할 것을 예시로 보여주고 설명이 적혀 있습니다. 그리고 해당 함수 호출 타이밍은 finalization queue에 등록이 되고 reclaimed 되기 전 입니다. 호출되면 finalization이 된 object로 판단하고 기록합니다.
+</p>
+
+<p>
+    하지만 해당 함수는 몇 가지 문제가 있습니다. 해당 함수는 class가 소멸 시 바로 호출되지 않을 수도 있는데 이 문제는 GC(Garbage Collection)와 관련이 있습니다. GC에서 마킹을 해서 소멸되야할 객체로 인식하고 작업을 수행하기 까지는 시간이 걸릴 수 있습니다(자세한 사항은 Mark and Sweep 방식 참고) 이 외에도 몇 가지 이유 덕에 finalize()는 finalize를 완벽하게 수행하지 못하는 경우가 생깁니다. 이것은 자바의 메모리 관리 시스템, 즉 할당할 가용 메모리가 모자라는 경우에(즉, 명시적으로 해제가 되는 경우가 아닌) GC가 작동하기 떄문입니다.
+</p>
+    
+<p>
+    그래서 Java9 부터는 Object.Finalize()는 사용할 수 없게 되었습니다. 이러한 여러 가지 이유로 Finalize()는 본인의 임무를 잘 수행할 것이라는 믿음을 가지고 사용해서는 안됩니다. 따라서 개발자는 Finalize() 대신 다른 방법을 고민해야 할 필요가 있을 것 같네요,
+</p>
