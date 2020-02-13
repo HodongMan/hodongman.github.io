@@ -1,0 +1,80 @@
+---
+layout: post
+title:  "코틀린"
+subtitle: "코틀링 생성자에 대한 정리"
+date:   2020-2-6 03:32:27 -0500
+background: '/img/posts/03.jpg'
+---
+
+<h2 class="section-heading">Kotlin Constructor(생성자)</h2>
+
+<p>
+    생성자(Constructor)는 class가 생성될때 호출되는 특별한 함수입니다. 생성자를 보통 정의해서 사용하지만 대부분의 경우 정의가 안되어 있는 경우 기본(Default)을 컴파일러가 자동으로 생성합니다. 그리고 생성할때 호출되는 성질을 이용해서 이 함수를 통해 데이터를 초기화 하거나 class가 생성할때 필요한 작업을 수행합니다. 
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                class Account constructor( _email: String, _password: String) { // constructor
+
+                    val email: String
+                    val password: String
+                    
+                    init { // initialize command
+                        email = _email
+                        password = _password
+                    }
+                }
+        </code>
+    </pre>
+</div>
+
+<p>
+    다음과 같은 코드를 보면 낯선 키워드 2가지를 찾을 수 있습니다. 하나는 constructor 입니다. constructor키워드는 생략을 해도 똑같은 기능을 수행합니다. 이렇게 class 이름 다음에 오는 constructor[생략가능](코드) 형태의 코드를 주 생성자(Primary Constructor) 라고 부릅니다. 주 생성자는 파라미터 형태의 변수를 지정합니다.
+<p>
+   
+<p>
+    그 다음 키워드는 init입니다. init은 생성자의 정의 부분 코드 블록입니다. 해당 부분에는 개체가 생성될 때 실행하는 코드입니다. 예시처럼 주 생성자의 로직은 init 키워드로 정의된 코드 블록입니다. 
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                class Employee(val id: Int, val name: String, val isAdmin: Boolean = false)
+
+
+                >>> val newEmployee = Employee(1, "Hodongman")
+                >>> val manager = Employee(2, "Manager", true) 
+        </code>
+    </pre>
+</div>
+
+<p>
+    다음과 같이 생성자 코드에 임시(Default)값을 지정해서 사용할 수도 있습니다. 그러면 isAdmin값을 설정하지 않으면 자동으로 디폴트 값이 설정이 될 것입니다. 해당 값을 수정하려면 명시적으로 넣어줘야 합니다. 그리고 코틀린에서는 모든 생성자 변수에 디폴트 값을 넣으면 컴파일러가 자동으로 파라미터가 아무것도 없는 생성자를 생성합니다. 물론 생성자 파라미터가 아무것도 없어도 마찬가지로 컴파일러가 생성합니다.
+<p>
+
+<p>
+    주 생성자와 반대되는 개념으로 보조 생성자(Secondary Constructor)가 있습니다. 이것은 생성자가 하나 이상인 경우를 말합니다. 주 생성자와 달리 class 코드 안에 코드를 작성합니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                class Employee{
+
+                    constructor(val id: Int, val name: String, val isAdmin: Boolean = false) {
+                        var id: Int = id
+                        var name: String = name
+                        var isAdmin: Boolean = isAdmin
+                    }
+                    
+                    constructor(val id: Int, val name: String, val isAdmin: Boolean = false, val salary: Int) {
+                        var id: Int = id
+                        var name: String = name
+                        var isAdmin: Boolean = isAdmin
+                        var salary: Int = salary
+                    }
+                }
+        </code>
+    </pre>
+</div>

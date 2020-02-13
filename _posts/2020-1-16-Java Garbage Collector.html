@@ -1,0 +1,29 @@
+---
+layout: post
+title:  "자바 가비지 컬렉터"
+subtitle: "자바 가비지 컬렉터 동작 방식에 대한 정리"
+date:   2020-1-16 03:32:27 -0500
+background: '/img/posts/02.jpg'
+---
+
+<h2 class="section-heading">Java Garbage Collection</h2>
+
+<p>
+    Java가 다른 managed language와 다른 점은 명시적으로 Heap에 할당된 메모리를 해제하지 않는다 라는 것입니다. Heap에 할당되는 객체는 개발자가 필요할때 생성하지만 더 이상 사용하지 않을 때에는 JVM이 자동으로 메모리를 해제합니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            list = new SimpleList();
+
+            for (SimpleElement se : element.values()) {
+                
+                listElement element = se.getRelease();
+                element.shrint_to_fit();
+
+                list.push_back(element);
+            }
+        </code>
+    </pre>
+</div>
