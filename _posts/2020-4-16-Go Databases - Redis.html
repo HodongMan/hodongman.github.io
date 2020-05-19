@@ -1,0 +1,84 @@
+---
+layout: post
+title:  "Go Redis"
+subtitle: "Go에서 Redis에 관한 사용 및 정리"
+date:   2020-4-16 01:58:27 -0200
+background: '/img/posts/02.jpg'
+---
+
+<h2 class="section-heading">Redis란</h2>
+
+<p>
+    Redis란 Key-Value 형태의 데이터를 저장하고 관리하는 형태의 데이터베이스(NOSQL)입니다. 흔히 in-memory data structure store 라고 불립니다. 그래서 디스크나 SSD에 데이터를 기록하는 다른 데이터베이스와 달리 메모리에 있기 때문에 디스크 엑세스 시간이 필요 없습니다. 보통 데이터베이스, 캐시, 메시지 브로커 및 대기열에 사용이 됩니다. 비슷한 기능으로 Memcached라는 것이 존재합니다. 따라서 각자의 특성을 파악해서 원하는 곳에 사용하는 것이 바람직 합니다.  
+<p>
+
+<p>
+    아마 대부분의 Redis를 사용하는 프로그래머는 간단하고 빠르기 때문에 캐시용도로 많이 사용할 것입니다. 그리고 그것은 ANSI C로 작성이 되어 있기 때문에 그리고 in-memory 구조이기 때문에 그런 것으로 보입니다. 
+<p>
+
+<p>
+    redis-server 명령어로 기본 port 번호는 6379입니다. 해당 설정은 기본사항으로 redis.conf라는 파일에 기록이 됩니다. 변경을 원하면 port항목을 변경하면 됩니다. 그 외에도 접근 허용 ip(bind)와 password등을 설정하여 유효한 사용자만 접근을 허락할 수 있습니다.
+<p>
+
+<h2 class="section-heading">Go에서 Redis 활용하기</h2>
+
+<p>
+    Go에서 Redis를 활용하는 방법은 Redis package를 이용하는 방법입니다. https://github.com/go-redis/redis를 활용하면 쉽게 접근할 수 있습니다.
+<p>
+
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                package main
+
+                import (
+                    "fmt"
+
+                    redis "github.com/go-redis/redis"
+                )
+
+                func initializeRedisClient() (*redis.Client, error) {
+
+                    client := redis.NewClient(&redis.Options{
+                        Addr:     "localhost:6379", // 접근 url 및 port
+                        Password: "",               // password ""값은 없다는 뜻
+                        DB:       0,                // 기본 DB 사용
+                    })
+
+                    _, err := client.Ping().Result()
+
+                    return client, err
+                }
+
+                func executeSomething() {
+
+                    client, err := initializeRedisClient()
+
+                    if nil != err {
+                        panic(err)
+                    }
+
+                    err = client.Set("value", "2", 0).Err() // 마지막 인자는 만료 시간 Redis 데이터의 만료 시간을 지정할 수 있다.
+                    if err != nil {
+                        panic(err)
+                    }
+
+                    val, err := client.Get("value").Result()
+                    if err != nil {
+                        panic(err)
+                    }
+                    fmt.Println("value : ", val)
+                }
+
+                func main() {
+                    executeSomething()
+                }
+
+        </code>
+    </pre>
+</div>
+
+<p>
+    작성중...
+<p>
