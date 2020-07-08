@@ -1,0 +1,107 @@
+---
+layout: post
+title:  "Singleton"
+subtitle: "싱글턴에 관한 이해"
+date:   2020-4-14 11:49:27 -0100
+background: '/img/posts/01.jpg'
+---
+
+<h2 class="section-heading">싱글턴(Singleton Patterns)</h2>
+
+<p>
+    싱글턴 패턴의 핵심은 오직 1개만 생성해야 하는 것입니다. 따라서 생성자가 n번 호출되어도 생성은 1번만 되는 특징이 있습니다. 만드는 방법은 여러 가지가 있습니다. 그리고 Scala처럼 언어 자체의 기능으로 제공하는 경우도 있습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                package test
+
+                object Singleton { // scala의  object 직접 인스턴스화 될 수 없는 싱글턴 클래스를 정의하기 위한 축약형 같은 것입니다
+                    def sum(l: List[Int]): Int = l.sum
+                }
+        </code>
+    </pre>
+</div>
+
+<p>
+    대부분의 경우는 이러한 기능이 없어서 직접 구현해야 하는 경우가 많이 있습니다. 이럴 경우 가장 흔한 방법은 생성자를 private으로 숨겨서 함부로 호출할 수 없게 하는 것입니다. 그리고 getInstance같은 해당 인스턴스를 접근할 수 있는 특별한 함수를 제공하는 것입니다. Scott Meyers의 Effective C++에서 소개한 방식의 싱글턴이 가장 인상적입니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                class CumstomSingleton
+                {
+                public:
+                    static CumstomSingleton& getInstance( void ) noexcept // 중요 참조
+                    {
+                        static CumstomSingleton instance;
+                        return instance;
+                    }
+
+                private:
+                    CumstomSingleton( void ) = default; // 중요 참조
+                    ~CumstomSingleton( void ) = default;
+
+                    CumstomSingleton( const CumstomSingleton& rhs ) = delete;
+                    CumstomSingleton& operator=( const CumstomSingleton rhs ) = delete
+                }
+        </code>
+    </pre>
+</div>
+
+<p>
+    특이할점은 getInstance()의 내부 구현의 instance 변수가 static으로 선언이 되어 있다는 점입니다. 저 영역의 static변수는 한번만 생성된 것을 확인할 수 있습니다. 특히 중요한 것은 저 초기화가 Thread-Safe 하다는 점입니다. C++11의 스레드 안전 로컬 정적 초기화 시맨틱이 작동한다고 한다면요. 
+<p>
+
+<p>
+    한 가지 신경쓸만한 단점은 getInstance()를 최초 호출한 시점에 생성이 되어 초기화가 될 수 있다는 점입니다. 따라서 정확한 초기화 시점을 제어할 수 없습니다. 이것이 이 방법을 사용하는 단점 입니다. 그래서 다양한 방법으로 이러한 문제를 해결할 수 있는데 관심이 있으시다면 Ogre Engine이 싱글턴을 어떻게 관리하고 처리하는지 확인하면 좋을 것 같습니다.
+<p>
+
+<p>
+    싱글턴이 꼭 필요한 케이스가 있긴 하지만 꼭 필요하지 않아도 전역 변수랑 비슷한 특성을 가지고 있기 때문에 여러 곳에서 의미 없이 사용되는 경우도 많이 있습니다. 하지만 싱글턴을 사용한다는 것은 언제 어디서든 쉽게 호출되고 데이터 변경이 있을 수가 있기 때문에 꼭 필요한 경우가 아니라면 사용하지 않는 것이 코드의 결합성을 낮추고 버그를 찾기 쉽게 만듭니다. 저의 예시는 Windows Application에서 Windows를 생성하는 Class를 싱글턴으로 생성 했습니다. 
+<p>
+
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                GraphicsManager* GraphicsManager::getInstance( void ) noexcept
+                {
+                    static GraphicsManager graphicsManager;
+
+                    return &graphicsManager;
+                }
+
+                void WindowApplicationManager::onCreate( void ) noexcept
+                {
+                    Window::onCreate();
+                    GraphicsManager::getInstance()->initialize();
+                    
+                    _swapChain		= GraphicsManager::getInstance()->createSwapChain(); // 연관성 없이 쉽게 사용하기
+                    if ( nullptr == _swapChain )
+                    {
+                        return;
+                    }
+
+                    const RECT rect = getWindowRect();
+                    if ( false == _swapChain->initialize( _hwnd, rect.right - rect.left, rect.bottom - rect.top ) )
+                    {
+                        return;
+                    }
+                    
+                    _vertexBuffer	= GraphicsManager::getInstance()->createVertexBuffer(); // 연관성 없이 쉽게 사용하기
+                    if ( nullptr == _vertexBuffer )
+                    {
+                        return;
+                    }
+        </code>
+    </pre>
+</div>
+
+<h2 class="section-heading">Singleton의 응용</h2>
+
+<p>
+    작성중... Signleton을 기능처럼 활용하는 Mixin Class
+<p>
