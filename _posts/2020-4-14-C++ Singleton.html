@@ -25,6 +25,39 @@ background: '/img/posts/01.jpg'
 </div>
 
 <p>
+    또는 C# 처럼 static class 처럼 문법적으로 new를 사용할 수 없으며, 인스턴스 생성자를 포함할 수 없는 형태의 방법을 통해 싱글턴을 사용할 수도 있습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                public static class TemperatureConverter
+                {
+                    public static double CelsiusToFahrenheit(string temperatureCelsius)
+                    {
+                        double celsius = Double.Parse(temperatureCelsius);
+                        
+                        double fahrenheit = (celsius * 9 / 5) + 32;
+
+                        return fahrenheit;
+                    }
+
+                    public static double FahrenheitToCelsius(string temperatureFahrenheit)
+                    {
+                        double fahrenheit = Double.Parse(temperatureFahrenheit);
+
+                        double celsius = (fahrenheit - 32) * 5 / 9;
+
+                        return celsius;
+                    }
+                }
+
+                // MSDN의 static class의 예시 
+        </code>
+    </pre>
+</div>
+
+<p>
     대부분의 경우는 이러한 기능이 없어서 직접 구현해야 하는 경우가 많이 있습니다. 이럴 경우 가장 흔한 방법은 생성자를 private으로 숨겨서 함부로 호출할 수 없게 하는 것입니다. 그리고 getInstance같은 해당 인스턴스를 접근할 수 있는 특별한 함수를 제공하는 것입니다. Scott Meyers의 Effective C++에서 소개한 방식의 싱글턴이 가장 인상적입니다.
 <p>
 
