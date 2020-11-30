@@ -1,0 +1,114 @@
+---
+layout: post
+title:  "C++ Copy Elision(복사 생략)"
+subtitle: "C++에서 최적화와 관련된 기능"
+date:   2020-11-1 23:55:27 -0400
+background: '/img/posts/01.jpg'
+---
+
+<h2 class="section-heading">Copy Elision</h2>
+
+<p>
+    Copy Elision(복사 제거)란 C++11에서 공식화된 기능으로 cppreference의 설명을 참고하면 Omits copy and move constructor, resulting zero-copy pass-by-value semantics 라고 소개하고 있습니다. 즉 컴파일러가 복사 또는 이동 연산자를 회피 할 수 있으면 회피하는 것을 허용하는 방식입니다. 그래서 특정 조건을 만족하면 컴파일러가 임의로 최적화를 위해 복사 및 이동 연산을 생략합니다. 이게 생각보다 엄청 큰 효과를 가져온다고 합니다. 크게 두 가지 경우가 있는데 Return Value Optimization(반환값 최적화)인 경우와 class type의 template object(임시 개체)가 동일한 유형의 복사될 때 입니다.
+<p>
+
+<h2 class="section-heading">Return Value Optimization</h2>
+
+<p>
+    아래의 코드와 같은 경우 컴파일러는 개체의 복사 연산자를 파기합니다. 사실 코드만 보면 복사 연산자는 무조건 일어나야 합니다. 하지만 Copy Elision 최적화로 인해 컴파일러가 임시 복사본을 만드는 코드를 직접 제어해서 복사 및 이동 연산자를 사용하지 않습니다. 즉 컴파일러는 임시로 초기화 식을 가져와서 함수의 반환 값을 직접 초기화 합니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                #include <iostream>
+                
+                class ReturnValue
+                {
+                public:
+                    ReturnValue( void ) = default;
+                    ReturnValue( const ReturnValue& rhs )
+                    {
+                        std::cout << "Copy" << std::endl;
+                    }
+                };
+
+                inline makeReturnValue( void ) noexcept 
+                {
+                    // Copy Elision을 하려면 inline 함수이거나 컴파일러가 해당 함수의 내용을 인지할 수 있어야 합니다.
+                    return ReturnValue();
+                }
+
+                int main()
+                {
+                    std::cout << "Hello World" << std::endl;
+                    ReturnValue returnValue = makeReturnValue();
+                    return 0;
+                }
+        </code>
+    </pre>
+</div>
+
+<p>
+    컴파일러가 Return Value Optimization을 하게 되면 Copy라는 것은 출력되지 않을 수도 있습니다. 이 방안은 우리가 의도한 대로 코드는 돌아가지 않을 수 있지만 꽤나 멋진 방법으로 평가받고 있습니다. 함수 에서 내장 유형의 개체를 반환하는 것은 일반적으로 해당 개체가 CPU 레지스터에 일치하는 부분이기 때문에 오버헤드가 거의 발생하지 않습니다. 클래스 유형의 개체는 더 큰 개체를 반환하려면 한 메모리 위치에서 다른 메모리 위치로 복사하는 데 많은 비용이 필요할 수 있습니다. 이를 방지하기 위해 컴파일러는 호출자의 스택 프레임에 숨겨진 개체를 만들고 이 개체의 주소를 함수에 전달할 수 있습니다. 그런 다음 함수의 반환값이 숨겨진 개체에 복사됩니다. 
+<p>
+
+<p>
+    이런 최적화를 얻을 수 없는 경우가 있는데 함수의 로직에 따라 반환 값이 변경되는 경우가 있습니다. 그것은 해당 로직을 실행시키지 않으면 결과를 알 수가 없기 때문에 그런것으로 보입니다. Cppcorn2018에 나온 예시를 보면 이러한 경우를 명확히 알 수 있습니다
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                Widget g()
+                {
+                    Widget a, b;
+
+                    if (pred(some_value))
+                    {
+                        return a;
+                    }
+                    else
+                    {
+                        return b;
+                    }
+                }
+
+                int main()
+                {
+                    Widget a;
+                    return pred(some_value) ? a: Widget{};
+                }
+        </code>
+    </pre>
+</div>
+
+<h2 class="section-heading">Template Object</h2>
+
+<p>
+    위에서 언급한 것처럼 한 메모리 위치에서 다른 메모리 위치로 복사되는데 크기가 맞지 않다면 더 많은 비용이 필요할 수 있습니다. 이를 방지하기 위해 호출자의 스택 프레임에 숨겨진 개체를 만들고 이 개체의 주소를 함수에 전달할 수 있습니다. 그런 다음 함수의 반환 값이 숨겨진 개체에 복사됩니다
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                const ReturnValue createReturnValue( void ) noexcept
+                {
+                    return ReturnValue();
+                }
+
+                ReturnValue* createReturnValue( ReturnValue* _tempararyReturnValue ) noexcept
+                {
+                    ReturnValue returnValue;
+
+                    // 숨겨진 개체에 값 복사한 후 반환
+                    *_tempararyReturnValue = returnValue;
+                    return _tempararyReturnValue;
+                }
+        </code>
+    </pre>
+</div>
+
+<p>
+    임시 개체의 복사는 위와 같이 Copy Elision이 발생하면 생략할 수 있습니다. 임시 개체의 효과를 받으면 두 코드는 컴파일러의 의해 같아집니다. 이러면 복사 연산자가 생략되고도 같은 코드의 역할을 할 수 있습니다. 이는 생각보다 많은 최적화를 가져온다고 합니다. 따라서 우리는 이 효과를 적극적으로 사용하기 위해 return값이나 parameter에 const를 붙이는 습관을 들여야 합니다. 그러면 변경의 여지가 없기 때문에 컴파일러가 최적화로 판단할 여지가 더 많이 있습니다.(More Effective C++ 20장)
+<p>
