@@ -1,0 +1,148 @@
+---
+layout: post
+title:  "Spring Boot 그리고 JPA"
+subtitle: "Spring Boot JPA를 통한 REST API"
+date:   2020-5-24 09:29:27 -0100
+background: '/img/posts/01.jpg'
+---
+
+<h2 class="section-heading">Spring Boot란?</h2>
+
+<p>
+    Spring Boot는 "Just Run" 할 수있는 독립 실행 형태 및 프로덕션 레벨의 Spring 기반 애플리케이션을 쉽게 만들 수 있다고 합니다. Pivotal Team에서 개발했으며 Java로 마이크로 서비스를 생성할 수 있는 도구 중 하나입니다. 아마 많은 분들이 Spring을 사용하면서 느꼈던 부담은 너무 복잡한 설정과 어려운 방법의 실행 준비 였을 것이라고 생각합니다. 하지만 Spring Boot 기반의 어플리케이션을 작성하면 구성을 자동으로 할수 있으며 의존성을 관리하기가 편합니다. 이러한 장점떄문에 저는 거의 Java기반의 백엔드 어플리케이션을 작성한다고 하면 Spring Boot를 사용합니다. 
+<p>
+
+<h2 class="section-heading">Project Setting</h2>
+
+<p>
+    Spring boot를 시작하게 도와주는 Project Setting에는 두 가지 방법이 있습니다([initializr]https://github.com/spring-io/initializr, [Sagan]https://github.com/spring-io/sagan) 저는 주로 initializr를 사용하는데 https://start.spring.io/로 접근하면 쉽게 바로 Spring Boot Project를 바로 생성할 수 있습니다. 해당 기능을 통해 의존 관계를 지정하고 main을 시작하게 하는 자바 프로젝트(Maven, Gradle)를 생성 가능합니다. 
+<p>
+
+<img class="img-fluid" src="img/spring-boot/initialize.png" alt="Demo Image">
+<span class="caption text-muted">Spring initializr Dependency</span>
+
+<p>
+    Spring Boot에서 JPA를 사용하려면 의존성을 추가해야 합니다. H2는 Spring Boot에서 사용할 수 있는 내장 Database입니다. 그 외에는 기본적으로 사용하려면 필요한 Dependency를 추가 했습니다. 이렇게 하면 새로운 프로젝트를 사용할 수 있는데 실행 명령어는 다음과 같습니다.
+<p>
+    
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-data-jpa</artifactId>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-hateoas</artifactId>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-security</artifactId>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-web</artifactId>
+                    </dependency>
+            
+                    <dependency>
+                        <groupId>com.h2database</groupId>
+                        <artifactId>h2</artifactId>
+                        <scope>runtime</scope>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-test</artifactId>
+                        <scope>test</scope>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.springframework.security</groupId>
+                        <artifactId>spring-security-test</artifactId>
+                        <scope>test</scope>
+                    </dependency>
+                </dependencies>                   
+        </code>
+    </pre>
+</div>
+
+<p>
+    아마 Spring Boot initializr를 사용하면 pol.xml에 다음과 같은 의존성이 추가될 것입니다. 해당 의존성은 매우 쉽게 다른 라이브러리 등을 쉽게 추가할 수 있도록 보기와 같이 되어 있습니다. 또 해당 방법은 다른 언어와 비슷한데요. SBT 등도 다음과 같이 의존성을 추가할 수 있어서 참고하시면 도움이 될 듯 합니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            ./mvnw spring-boot:run // Maven Start Spring Boot Command 
+            ./gradlew bootRun // Gradle Start Sptring Boot Command
+        </code>
+    </pre>
+</div>
+
+<img class="img-fluid" src="img/spring-boot/launch.png" alt="Demo Image">
+<span class="caption text-muted">Spring Boot Start/span>
+
+<p>
+    위와 같이 실행이 되면 초기 설정에 따라 정상적으로 8080 port에 서버가 실행 됩니다. 초기 실행 main 코드는 아래와 같습니다. @SpringBootApplication 어노테이션을 통해 의존성을 근거로 자동으로 Spring Application을 설정할 수 있습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            package com.hodong.jpaprac;
+
+            import org.springframework.boot.SpringApplication;
+            import org.springframework.boot.autoconfigure.SpringBootApplication;
+            
+            @SpringBootApplication
+            public class JpapracApplication {
+            
+                public static void main(String[] args) {
+                    SpringApplication.run(JpapracApplication.class, args);
+                }
+            
+            }                
+        </code>
+    </pre>
+</div>
+
+<p>
+    해당 어노테이션을 조금 자세히 살펴 보면 @SpringBootConfiguration @EnableAutoConfiguration @ComponentScan을 볼 필요가 있습니다. @SpringBootConfiguration는 Spring Boot의 표준 설정 정의가 가능한 어노테이션 입니다. @SpringBootConfiguration를 가지면 해당 class가 @Bean 어노테이션을 정의하는 method를 가진다는 것을 의미합니다. @Configuration에 비해서 구성을 자동으로 찾을 수 있다는 차이점이 있습니다. @EnableAutoConfiguration은 JdbcTemplate 빈 생성과 같은 Spring Application에 기본 구성을 제공합니다. 경로에서 필요한 Bean을 추측하고 애플리케이션을 실행하도록 구성함으로써 개발자의 작업을 단순화 하는 역할을 합니다. @ComponentScan은 구성 주석 주석 구성 요소를 검색하는 봄에게 패키지를 이야기합니다. @ComponentScan은 기본 패키지를 식별하는데 사용합니다. 그래서 해당 기능을 사용하면 기본 패키지와 기본 패키지의 클래스를 지정하는 역할을 할 수 있습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                @Target(ElementType.TYPE)
+                @Retention(RetentionPolicy.RUNTIME)
+                @Documented
+                @Inherited
+                @SpringBootConfiguration
+                @EnableAutoConfiguration
+                @ComponentScan(excludeFilters = { @Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
+                        @Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class) })
+                public @interface SpringBootApplication {
+                
+                    /**
+                     * Exclude specific auto-configuration classes such that they will never be applied.
+                     * @return the classes to exclude
+                     */
+                    @AliasFor(annotation = EnableAutoConfiguration.class)
+                    Class<?>[] exclude() default {};
+                    
+                    ......
+        </code>
+    </pre>
+</div>
+
+<h2 class="section-heading">JPA(Java Persistence API)</h2>
+
+<p>
+    JPA(Java Persistence API)는 Java의 Class를 관계형 데이터베이스의 Table에 매핑하기 위한 기능입니다. 흔히 말하는 ORM(Object Relational Mapping)의 기능을 구현한 것 중 하나입니다. 일반적으로 그것은 Entity(java Class)라고 부릅니다. Hibernate, EclipseLink, DataNucleus 등으로 구현되어 있는데 일반적으로 Hibernate를 많이 사용합니다. 해당 기능을 하는 Class를 작성하려면 @Entity 어노테이션이 필요합니다.
+<p>
+
+<h2 class="section-heading">JPA Repository<T, ID></h2>
+
+<p>
+    JpaRepository의 JPA 기능을 확장해서 사용할 수 있는 Repository 입니다. CrudRepository및 의 전체 API를 포함합니다 PagingAndSortingRepository. 따라서 기본 CRUD 작업을위한 API와 페이지 매김 및 정렬을위한 API가 포함되어 있습니다.
+<p>
