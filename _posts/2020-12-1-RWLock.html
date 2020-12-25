@@ -196,6 +196,45 @@ background: '/img/posts/02.jpg'
             private:
                 SRWLOCK _handle;
             };
+
+            template<typename Mutex, BOOL ISREAD>
+            class SRWLockGuard
+            {
+            public:
+                SRWLockGuard( Mutex& mutex )
+                    : _mutex{ &mutex }
+                {
+                    if ( true == ISREAD )
+                    {
+                        _mutex->readLock();
+                    }
+                    else
+                    {
+                        _mutex->writeLock();
+                    }
+                }
+            
+                ~SRWLockGuard()
+                {
+                    if ( true == ISREAD )
+                    {
+                        _mutex->readUnlock();
+                    }
+                    else
+                    {
+                        _mutex->writeUnlock();
+                    }
+                }
+            
+            private:
+                Mutex* _mutex;
+            };
+            
+            template<typename Mutex>
+            using SRLockGuard = SRWLockGuard<Mutex, true>;
+            
+            template<typename Mutex>
+            using SWLockGuard = SRWLockGuard<Mutex, false>;
         </code>
     </pre>
 </div>
