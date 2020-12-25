@@ -6,45 +6,197 @@ date:   2020-12-1 05:39:33 -0200
 background: '/img/posts/02.jpg'
 ---
 
-<h2 class="section-heading">Data Steam Framework</h2>
+<h2 class="section-heading">RW Lock이란</h2>
 
 <p>
-    현대의 응용 프로그램은 수 많은 데이터를 생산하고 사용합니다. 기존에는 전통적으로 데이터를 저장하고 나중에 일괄적으로 처리하는 방식을 사용했습니다. 하지만 많은 데이터의 실시간 처리가 중요해져서 더 이상 기존 방식은 좋은 방법이 아닙니다. 이를 위해서는 실시간 스트림 프로세서를 사용하여 더 많은 스트림 기반으로 애플리케이션의 데이터를 처리 해야 합니다. 따라서 이러한 기능을 제공하는 여러 프레임 워크가 있습니다. 그중 하나인 Apache Flink는 상태 저장, 대규모 분산 및 내결함성 스트림 처리를위한 오픈 소스 프레임 워크 입니다. Apache Flink의 DataStream API를 통해 제공하는 기능을 사용할 수 있습니다.
+    RW Lock은 일반적으로 Read는 값을 변경하지 않으니 동기화 문제에서 좀더 자유로울 수 있고, Write 작업만 하나의 mutex를 가지고 접근해야 한다는 아이디어를 가지고 출발합니다. 대신 Read중에 값을 변경하는 일은 없어야 합니다. 그래서 일반적으로 Read-Lock, Write-Lock, Unlock 이 세가지 상태가 존재합니다. 그래서 RW Lock은 읽기 작업에 대한 동시 액세스를 허용 하는 반면 쓰기 작업에는 단독 액세스가 필요합니다.
 <p>
 
-<h2 class="section-heading">Apache Flink</h2>
+<h2 class="section-heading">Linux RWLock</h2>
 
 <p>
-    Apache Flink는 대량의 스트리밍 데이터를 수집하고 여러 노드에서 분산 방식으로 처리 할 수 ​​있습니다. 그래서 Apachek Flink 파이프 라인의 기본 기능은 입력 및 출력의 처리입니다. 그리고 fault-tolerant으로 지연이 적은 처리를 할 수 있습니다. Flink는 스트리밍 데이터에 대한 실시간 데이터 분석을 가능하게하며 스트리밍 데이터의 Extract-Transform-Load기능으로 파이프 라인과 이벤트 기반 애플리케이션에도 적합합니다. 에러가 발생하는 경우에도 비동기로 체크하여 상태를 저장하여 복구할 수 있는 기능을 제공합니다.
+    여러 스레드가 동시에 리소스에 액세스 할 수 있도록 pthread에서 pthread_rwlock_t를 사용할 수 있습니다. 읽기, 쓰기 잠금 인 pthread_rwlock_t는 여러 스레드가 리소스에 액세스 할 수 있도록 허용하지만 한 타임에 한 스레드만 허용합니다. 컴파일 시에는 pthread 사용법과 동일하게 -lpthread 플래그를 사용하여 컴파일합니다.
 <p>
 
-<h2 class="section-heading">Data Stream</h2>
-
-<p>
-    Apache Flink의 기본 요소는 Stream와 Transformations 입니다. Stream은 말 그대로 Data Record의 흐름입니다. Transformations는 일반적으로 입력과 하나 이상의 출력의 Stream으로 구성되어 있습니다.
-<p>
-        
 <div class="highlighter-rouge">
     <pre class="highlight">
         <code>
-                val env = ExecutionEnvironment.getExecutionEnvironment
+            class RWLock
+            {
+            public:
+            RWLock( void )
+                {
+                    pthread_rwlock_init(&_mutex, nullptr);
+                }
 
-                val text = env.fromElements("To be, or not to be,--that is the question:--",
-                "Whether 'tis nobler in the mind to suffer", "The slings and arrows of outrageous fortune",
-                "Or to take arms against a sea of troubles,")
+                ~RWLock( void )
+                {
+                    pthread_rwlock_destroy( &_mutex );
+                }
 
-                val counts = text.flatMap { _.toLowerCase.split("\\W+") } // Transformations
-                .map { (_, 1) }
-                .groupBy(0)
-                .sum(1)
+                void readLock( void ) noexcept
+                {
+                    pthread_rwlock_rdlock( &_mutex );
+                }
+
+                void readUnlock( void ) noexcept
+                {
+                    pthread_rwlock_unlock( &_mutex );
+                }
+
+                void writeLock( void ) noexcept
+                {
+                    pthread_rwlock_wrlock( &_mutex );
+                }
+
+                void writeUnlock( void ) noexcept
+                {
+                    pthread_rwlock_unlock( &_mutex );
+                }
+
+            private:
+                pthread_rwlock_t _handle;
+            };
         </code>
     </pre>
 </div>
 
 <p>
-    Transformations는 때때로 위의 예시처럼 하나 이상의 Transform Operator로 구성될 수 있습니다. 그리고 Apache Flink에서는 이러한 것들이 병렬적으로 처리할 수 있습니다.
+    Linux도 Windows와 동일하게 기다리고 있음을 알리는 Flag값을 설정하고 Spin을 먼저 하는 순서로 되어 있습니다.
 <p>
 
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+                pthread_rwlock_common.c 참조
+                if (rwlock->__data.__flags == PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)
+                {
+                  r = atomic_load_relaxed (&rwlock->__data.__readers);
+                  while ((r & PTHREAD_RWLOCK_WRPHASE) == 0
+                         && (r & PTHREAD_RWLOCK_WRLOCKED) != 0
+                         && (r >> PTHREAD_RWLOCK_READER_SHIFT) > 0)
+                    {
+                      /* TODO Spin first.  */
+                      /* Try setting the flag signaling that we are waiting without having
+                         incremented the number of readers.  Relaxed MO is fine because
+                         this is just about waiting for a state change in __readers.  */
+                      if (atomic_compare_exchange_weak_relaxed
+                          (&rwlock->__data.__readers, &r, r | PTHREAD_RWLOCK_RWAITING))
+                        {
+                          /* Wait for as long as the flag is set.  An ABA situation is
+                             harmless because the flag is just about the state of
+                             __readers, and all threads set the flag under the same
+                             conditions.  */
+                          while (((r = atomic_load_relaxed (&rwlock->__data.__readers))
+                                  & PTHREAD_RWLOCK_RWAITING) != 0)
+                            {
+                              int private = __pthread_rwlock_get_private (rwlock);
+                              int err = futex_abstimed_wait (&rwlock->__data.__readers,
+                                                             r, abstime, private);
+                              /* We ignore EAGAIN and EINTR.  On time-outs, we can just
+                                 return because we don't need to clean up anything.  */
+                              if (err == ETIMEDOUT)
+                                return err;
+                            }
+                          /* It makes sense to not break out of the outer loop here
+                             because we might be in the same situation again.  */
+                        }
+                      else
+                        {
+                          /* TODO Back-off.  */
+                        }
+                    }
+                }
+              /* Register as a reader, using an add-and-fetch so that R can be used as
+                 expected value for future operations.  Acquire MO so we synchronize with
+                 prior writers as well as the last reader of the previous read phase (see
+                 below).  */
+              r = (atomic_fetch_add_acquire (&rwlock->__data.__readers,
+                                             (1 << PTHREAD_RWLOCK_READER_SHIFT))
+                   + (1 << PTHREAD_RWLOCK_READER_SHIFT));
+              /* Check whether there is an overflow in the number of readers.  We assume
+                 that the total number of threads is less than half the maximum number
+                 of readers that we have bits for in __readers (i.e., with 32-bit int and
+                 PTHREAD_RWLOCK_READER_SHIFT of 3, we assume there are less than
+                 1 << (32-3-1) concurrent threads).
+                 If there is an overflow, we use a CAS to try to decrement the number of
+                 readers if there still is an overflow situation.  If so, we return
+                 EAGAIN; if not, we are not a thread causing an overflow situation, and so
+                 we just continue.  Using a fetch-add instead of the CAS isn't possible
+                 because other readers might release the lock concurrently, which could
+                 make us the last reader and thus responsible for handing ownership over
+                 to writers (which requires a CAS too to make the decrement and ownership
+                 transfer indivisible).  */
+              while (__glibc_unlikely (r >= PTHREAD_RWLOCK_READER_OVERFLOW))
+                {
+                  /* Relaxed MO is okay because we just want to undo our registration and
+                     cannot have changed the rwlock state substantially if the CAS
+                     succeeds.  */
+                  if (atomic_compare_exchange_weak_relaxed
+                      (&rwlock->__data.__readers,
+                       &r, r - (1 << PTHREAD_RWLOCK_READER_SHIFT)))
+                    return EAGAIN;
+                }
+              /* We have registered as a reader, so if we are in a read phase, we have
+                 acquired a read lock.  This is also the reader--reader fast-path.
+                 Even if there is a primary writer, we just return.  If writers are to
+                 be preferred and we are the only active reader, we could try to enter a
+                 write phase to let the writer proceed.  This would be okay because we
+                 cannot have acquired the lock previously as a reader (which could result
+                 in deadlock if we would wait for the primary writer to run).  However,
+                 this seems to be a corner case and handling it specially not be worth the
+                 complexity.  */
+        </code>
+    </pre>
+</div>
+
+
+<h2 class="section-heading">Windows SRWLock</h2>
+
 <p>
-    작성중....
+    Windows는 Windows Vista부터 SRWLock(Slim Read Write Lock) 기능을 제공합니다. 해당 Mutex를 사용하면 단일 프로세스의 스레드가 공유 리소스에 액세스 할 수 있습니다. 속도에 최적화되어 있으며 메모리를 거의 차지하지 않습니다. 그리고 프로세스간에 공유 할 수 없습니다. 그리고 내부에서 SpinCount를 사용하는데 이 경우 락이 걸려 있는 경우 시스템 콜을 호출하고 Thread가 Wait상태로 가게 되는데 그 전에 SpinCount만큼 락을 획득하기 위한 시도를 하게 되므로 CPU 점유율은 다소 손해가 있지만 빠른 응답성을 가질 수 있습니다. 이는 Critical Section의 InitialCriticalSectionAndSprinCount기능과 비슷합니다.
 <p>
+        
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            class SRWMutex : public Noncopyable
+            {
+            public:
+                SRWMutex( void )
+                {
+                InitializeSRWLock( &_handle );
+                }
+
+                ~SRWMutex( void )
+                {
+
+                }
+
+                void readLock( void ) noexcept
+                {
+                    AcquireSRWLockShared( &_handle );
+                }
+
+                void readUnlock( void ) noexcept
+                {
+                    ReleaseSRWLockShared( &_handle );
+                }
+
+                void writeLock( void ) noexcept
+                {
+                    AcquireSRWLockExclusive( &_handle );
+                }
+
+                void writeUnlock( void ) noexcept
+                {
+                    ReleaseSRWLockExclusive( &_handle );
+                }
+
+            private:
+                SRWLOCK _handle;
+            };
+        </code>
+    </pre>
+</div>
+
