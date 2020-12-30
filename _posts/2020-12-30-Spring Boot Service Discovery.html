@@ -1,0 +1,107 @@
+---
+layout: post
+title:  "Spring Boot Service Discovery Euroka"
+subtitle: "Service Discovery 개념과 Netflix OSS의 Euroka 이해"
+date:   2020-12-30 21:30:27 -0100
+background: '/img/posts/04.jpg'
+---
+
+<h2 class="section-heading">Service Discovery</h2>
+
+<p>
+    Microservice Architecture에서는 서버의 개수가 여러 개 일수 있습니다. 그 이유는 서버의 기능별로 모듈화된 여러 서버가 컨테이너 기반(Docker)의 배포 시스템을 통해 배포되기 때문입니다. 게다가 Auto Scaling 기능을 사용하면 VM의 대수가 더 늘어날 것입니다. 기존의 Monologue Service에 비해서 서버의 부하에 따라 동적으로 늘어났다 줄어들었다 하기 때문에 서버의 위치 또한 동적입니다. 그래서 서비스를 검색할 수 있는 새로운 매커니즘이 필요합니다. 이것은 Service Discovery라고 합니다. 
+<p>
+
+<h2 class="section-heading">Service Discovery Client vs Server</h2>
+
+<p>
+    이러한 Service Discovery를 구현하는 방법은 크게 두 가지가 있는 것으로 알려져 있습니다. 하나는 Client 기반의 Service Discovery이고 하나는 Server 기반의 Service Discovey입니다. Client Service Discovery는 사용 가능한 서버 인스턴스와 위치를 확인해서 직접 로드 벨런싱 합니다. 그리고 그 결과에 따라 서버에 요청합니다. 서버 인스턴스는 그 기능을 시작할때 서비스 레지스트리에 등록을 요청합니다. 또 인스턴스가 종료되면 서비스 레지스트리에서 해지됩니다. Netflix Reborn이 이런 기능에 도움을 줄 수 있습니다.
+</p>
+
+<p>
+    이와 비교되는 Server Service Discovery는 Front에 존재한 Load Balancer가 해당 기능을 담당합니다. Load Balancer가 직접 서비스 레지스트리에서 최적의 서버 인스턴스를 찾아서 클라이언트에게 연결해 줍니다. 이 방법은 Client가 직접 이 작업을 처리하지 않고 단지 Load Balancer에게 맡기면 되지만 서버는 가용하는 서버가 늘어나기 때문에 조금 고민이 될 수 있습니다. 이를 구현하는 제일 간단한 방법 중 하나는 Nginx를 가지고 Reverse Proxy 형태로 구현하는 것입니다. 그 외에도 Kubernates 등의 Proxy를 실행하는 방법으로 구현할 수 있습니다.
+</p>
+
+<h2 class="section-heading">Service Registry</h2>
+
+<p>
+    결국 이 기능의 핵심은 Service Registry를 구현하는 것에 달려 있습니다. 등록된 정보를 통해 서버 인스턴스 중 가장 적합한 것을 알려줄 수 있는 기능이 필요합니다. 또한 서버 인스턴스의 등록과 제거 또한 잘 되어야 합니다. 일반적으로 Netflix Eureka를 통해 이를 구현할 수 있습니다. 그 외에도 etcd라고 불리는 Kubernates에서 사용하는 서비스 검색 기능에 사용되는 것도 있습니다. 아마 Apache Zookeeper도 충분히 고려할 만한 카드입니다. Hadoop의 구성요소 중 하나로 시작했지만 실제로 Kafka등에서도 사용되는 분산 어플리케이션용 조정 서비스 입니다. 저는 이 중에서도 Netflix Eureka를 살펴볼 것입니다.
+</p>
+
+<h2 class="section-heading">Netflix Eureka</h2>
+
+<p>
+    Service Registry를 구현하는 방법으로 소개할 것은 Netflix Eureka 입니다. 일단 Eureka Server를 띄우기 위해서는 spring-cloud-netflix Eureka Server 기능이 pol.xml에 추가 되어야 합니다. 그 기능을 추가하고 프로젝트를 생성해보겠습니다.
+</p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/service-discovery/init.PNG" alt="Demo Image">
+<span class="caption text-muted">Spring initializr Eureka Server</span>
+
+<p>
+    Eureka Service Registry 기능을 사용하려면 @EnableEurekaServer 어노테이션으로 해당 기능을 추가하면 됩니다. 간단하게 SpringBootApplication에다가 해당 기능을 추가해서 실행 해보겠습니다.
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            package com.hodong.eurekaprac;
+
+            import org.springframework.boot.SpringApplication;
+            import org.springframework.boot.autoconfigure.SpringBootApplication;
+            import org.springframework.cloud.netflix.eureka.server.EnableEurekaServer;
+
+
+            @EnableEurekaServer
+            @SpringBootApplication
+            public class EurekapracApplication {
+
+                public static void main(String[] args) {
+                    SpringApplication.run(EurekapracApplication.class, args);
+                }
+
+            }
+
+        </code>
+    </pre>
+</div>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/service-discovery/eureka-initialize.PNG" alt="Demo Image">
+<span class="caption text-muted">localhost:8761 Eureka Server</span>
+
+<p>
+    Eureka Server에 등록할 클라이언트 프로젝트를 만들어 보겠습니다. 기능에 spring-cloud-starter-netflix-eureka-client를 추가하면 해당 기능을 사용할 수 있습니다.
+</p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/service-discovery/eurekaclient-init.PNG" alt="Demo Image">
+<span class="caption text-muted">Spring initializr Eureka Client</span>
+
+<p>
+    해당 기능을 사용하려면 @EnableEurekaClient 어노테이션을 사용하면 가능합니다. 보통 SpringBootApplication에 등록합니다.
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            package com.hodong.eurekaclientprac;
+
+            import org.springframework.boot.SpringApplication;
+            import org.springframework.boot.autoconfigure.SpringBootApplication;
+            import org.springframework.cloud.netflix.eureka.EnableEurekaClient;
+
+
+            @EnableEurekaClient
+            @SpringBootApplication
+            public class EurekaclientpracApplication {
+
+                public static void main(String[] args) {
+                    SpringApplication.run(EurekaclientpracApplication.class, args);
+                }
+
+            }
+
+        </code>
+    </pre>
+</div>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/service-discovery/addclient.PNG" alt="Demo Image">
+<span class="caption text-muted">Add Eureka Client</span>
