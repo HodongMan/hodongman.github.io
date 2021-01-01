@@ -1,0 +1,156 @@
+---
+layout: post
+title:  "Scala의 HikariCP, Slick"
+subtitle: "Scala HTTP Server Tool에 필요한 도구 HikariCP, Slick"
+date:   2020-12-27 08:24:27 -0100
+background: '/img/posts/02.jpg'
+---
+
+<h2 class="section-heading">Database Connection Pool</h2>
+
+<p>
+    Pool은 컴퓨터 과학에서 일반적으로 사용중에 획득하는 Resource중에 사용 완료 시에 Release하지 않고 반납하여 사용할 수 있도록 하는 것의 모음입니다. 주로 Create와 Release의 많은 비용이 들어가기 때문에 매번 해당 연산을 수행할 수가 없어서 미리 생성해 놓고 반납하여서 비용을 절감하기 위해 사용합니다. 대표적으로 ThreadPool이 있습니다. Thread는 Create와 Release에 많은 비용이 들어가기 때문에, 그리고 사용할 수 있는 개수가 한정되어 있기 때문에 미리 Pool에다가 생성해놓고 할당, 반납 형태로 사용합니다. 그 외에도 많이 사용하는 곳이 Database Connection을 담당하는 부분입니다. Database에 접근하는 로직마다 Connection을 생성, 해제 하는 경우 실제 로직 처리보다 생성 및 해제 하는 연산이 더 무거울 수 있습니다. 그래서 미리 Database Connection Pool을 만들어 놓고 사용합니다.
+<p>
+
+<h2 class="section-heading">HikariCP</h2>
+
+<p>
+    JDBC에서 Connection Pool을 사용하는 Spring Framework나 Scala Application의 경우 Connection Pool을 직접 구현하지 않고 미리 제공하는 기능을 보통 사용하게 됩니다. 그 기능이 HikariCP 입니다. HikariCP는 Spring Boot 2.0에서 default로 설정된 Database Connection Pool 입니다. 다른 것에 비해서 견고하고 빠르다고 알려져 있습니다. SBT를 통해 사용하려면 buld.sbt에 아래와 같이 추가 하면 해당 기능을 사용할 수 있습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            "com.zaxxer" % "HikariCP" % "2.3.2", // DB ConnectionPool             
+        </code>
+    </pre>
+</div>
+
+<p>
+    HikariConfig를 통해서 DB의 정보 및 다양한 세팅 값을 설정할 수 있습니다. 이는 데이터 관련 리소스를 초기화 하는데 사용합니다. 그 관련 Class는 HikariDataSource입니다. 
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
+            
+            ....
+
+            val hikariConfig = new HikariConfig() // Hikari Config 설정
+        
+            hikariConfig.setJdbcUrl(jdbcUrl)
+            hikariConfig.setUsername(dbUser)
+            hikariConfig.setPassword(dbPassword)
+            
+
+            val datasource = new HikariDataSource(hikariConfig)
+        </code>
+    </pre>
+</div>
+
+<p>
+    실제 Scala Web Framework인 PlayFramework도 Hikari Connection Pool을 사용하는 코드를 찾을 수 있는데 해당 부분을 참고하면 사용을 어떻게 하고 있는지 도움이 될 수도 있을 것 같습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            /**
+            * HikariCP runtime inject module.
+            */
+            class HikariCPModule extends SimpleModule(bind[ConnectionPool].to[HikariCPConnectionPool])
+
+                /**
+                * HikariCP components (for compile-time injection).
+                */
+                trait HikariCPComponents {
+                def environment: Environment
+
+                lazy val connectionPool: ConnectionPool = new HikariCPConnectionPool(environment)
+                }
+
+                @Singleton
+                class HikariCPConnectionPool @Inject() (environment: Environment) extends ConnectionPool {
+                private val logger = Logger(getClass)
+
+                import HikariCPConnectionPool._
+
+                /**
+                * Create a data source with the given configuration.
+                *
+                * @param name the database name
+                * @param configuration the data source configuration
+                * @return a data source backed by a connection pool
+                */
+                override def create(name: String, dbConfig: DatabaseConfig, configuration: Config): DataSource = {
+                    val config = Configuration(configuration)
+
+                    Try {
+                    logger.info(s"Creating Pool for datasource '$name'")
+
+                    val hikariConfig      = new HikariCPConfig(name, dbConfig, config).toHikariConfig
+                    val datasource        = new HikariDataSource(hikariConfig)
+                    val wrappedDataSource = ConnectionPool.wrapToLogSql(datasource, configuration)
+
+                    // Bind in JNDI
+                    dbConfig.jndiName.foreach { jndiName =>
+                        JNDI.initialContext.rebind(jndiName, wrappedDataSource)
+                        logger.info(s"datasource [$name] bound to JNDI as $jndiName")
+                    }
+
+                    wrappedDataSource
+                    } match {
+                    case Success(datasource) => datasource
+                    case Failure(ex)         => throw config.reportError(name, ex.getMessage, Some(ex))
+                    }
+                }
+
+                /**
+                * Close the given data source.
+                *
+                * @param dataSource the data source to close
+                */
+                override def close(dataSource: DataSource) = {
+                    logger.info("Shutting down connection pool.")
+                    ConnectionPool.unwrap(dataSource) match {
+                    case ds: HikariDataSource => ds.close()
+                    case _                    => sys.error("Unable to close data source: not a HikariDataSource")
+                    }
+                }
+            }
+            출처 : https://github.com/playframework/playframework/blob/master/persistence/play-jdbc/src/main/scala/play/api/db/HikariCPModule.scala
+        </code>
+    </pre>
+</div>
+
+<h2 class="section-heading">Slick</h2>
+
+<p>
+    Slick(Scala Language-Integrated Connection Kit)은 관계형 데이터베이스와 연동 가능한 FRM(Functional Relational Mapping) 라이브러리 입니다. 쉽게 말해 JPA같은 ORM(Object Relational Mapping)과 목적에는 비슷한 점이 많이 있다고 볼 수 있습니다. 해당 소개 문서를 보면 데이터 베이스 작업의 실행은 비동기적으로 수행이 되기 때문에 PlayFramework나 Akka와 같은 곳에 잘 맞는다고 합니다. 그리고 다양한 관계형 데이터베이스를 지원하는데 저는 MariaDB와 연동하기 위해서 사용 했습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            "com.typesafe.slick" %% "slick" % "3.3.2", // SQL generator
+
+            ...
+
+            import slick.dbio.DBIO
+
+            import scala.concurrent.{ExecutionContext, Future}
+            import slick.jdbc.MySQLProfile.api.{
+                DBIO => _,
+                MappedTo => _,
+                Rep => _,
+                TableQuery => _,
+                _
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    Slick Model 작성 추가 중...
+<p>
