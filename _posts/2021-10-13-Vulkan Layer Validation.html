@@ -12,7 +12,7 @@ background: '/img/posts/03.jpg'
     Validation Layer는 오류 검사의 기능을 제공하는 레이어를 제공합니다. API 후킹 등의 방법을 통해 에러를 확인해서 출력하여 디버깅에 도움이 되거나 오류가 발생했을 때 dump를 뜨게 하는 등의 기능을 추가할 수 있을 것입니다. 저는 실제 작업 시에 ValidationLayer를 통해서 Vulkan의 작업 시에 문제가 발생했을 때 적절한 조치를 할 수 있었습니다. 예로 Asus Tuf의 AMD 세잔 이상의 CPU와 RTX 3070 노트북에서 Vulkan을 작업하는 경우 VK_LAYER_NV_optimus와 VK_LAYER_AMD_switchable_graphics를 동시에 조회가 가능한 경우가 있습니다. 그러면 물리적 장치를 조회하는 데 있어서 문제가 발생할 수 있습니다. 왜냐하면 두 항목 모두 고성능 GPU를 선택하기를 원하지만 AMD 또는 Nvidia GPU만 필터링 하기를 원합니다. 그래서 서로를 필터링해서 실제 사용할 수 있는 장치가 없다고 문제를 발생시킬 수 있습니다.
 <p>
 
-<img class="img-fluid" src="https://hodongman.github.io/img/vulkan-layer-validation/vkEnumerateInstanceLayerProperties.PNG" alt="Demo Image">
+<img class="img-fluid" src="https://hodongman.github.io/img/vulkan-layer-validation/vkEnumerateInstanceLayerProperties.png" alt="Demo Image">
 <span class="caption text-muted">vkEnumerateInstanceLayerProperties 결과</span>
 
 
