@@ -1,0 +1,87 @@
+---
+layout: post
+title:  "Vulkan의 유효성 검사 계층"
+subtitle: "Vulkan의 API 오류 검사를 위한 유효성 검사 계층"
+date:   2021-10-13 02:40:27 -0100
+background: '/img/posts/03.jpg'
+---
+
+<h2 class="section-heading">Vulkan의 Layer Validation</h2>
+
+<p>
+    Validation Layer는 오류 검사의 기능을 제공하는 레이어를 제공합니다. API 후킹 등의 방법을 통해 에러를 확인해서 출력하여 디버깅에 도움이 되거나 오류가 발생했을 때 dump를 뜨게 하는 등의 기능을 추가할 수 있을 것입니다. 저는 실제 작업 시에 ValidationLayer를 통해서 Vulkan의 작업 시에 문제가 발생했을 때 적절한 조치를 할 수 있었습니다. 예로 Asus Tuf의 AMD 세잔 이상의 CPU와 RTX 3070 노트북에서 Vulkan을 작업하는 경우 VK_LAYER_NV_optimus와 VK_LAYER_AMD_switchable_graphics를 동시에 조회가 가능한 경우가 있습니다. 그러면 물리적 장치를 조회하는 데 있어서 문제가 발생할 수 있습니다. 왜냐하면 두 항목 모두 고성능 GPU를 선택하기를 원하지만 AMD 또는 Nvidia GPU만 필터링 하기를 원합니다. 그래서 서로를 필터링해서 실제 사용할 수 있는 장치가 없다고 문제를 발생시킬 수 있습니다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/vulkan-layer-validation/vkEnumerateInstanceLayerProperties.PNG" alt="Demo Image">
+<span class="caption text-muted">vkEnumerateInstanceLayerProperties 결과</span>
+
+
+<h2 class="section-heading">Layer Properties 조회 및 등록</h2>
+
+<p>
+    Vulkan 1.1.1 Version 이상부터는 VK_LAYER_KHRONOS_Validation을 사용 설정하는 것이 가장 좋은 방법으로 알려져 있습니다. Vulkan 1.2 이상의 버전에서 테스트 해본 결과 vkEnumerateInstanceLayerProperties를 통하면 해당 Layer를 조회할 수 있었습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            const std::vector<const char*> requireValidationLayers = { "VK_LAYER_KHRONOS_Validation" }; // 등록할 Validation Layer
+
+            uint32_t layerCount = 0;
+
+            vkEnumerateInstanceLayerProperties( &layerCount, nullptr ); // 사용할 수 있는 layerCount 조회
+
+            std::vector<VkLayerProperties> availableLayers( layerCount );
+
+            vkEnumerateInstanceLayerProperties( &layerCount, availableLayers.data() ); // 사용할 수 있는 데이터를 조회
+
+            // VkLayerProperties는 다음와 같은 구성으로 되어 있었습니다
+
+            struct VkLayerProperties {
+                char layerName[VK_MAX_EXTENSION_NAME_SIZE]; // 실제로 사용할 데이터를 찾을 때 사용
+                uint32_t specVersion;
+                uint32_t implementationVersion;
+                char description[VK_MAX_DESCRIPTION_SIZE];
+            }
+
+            // VK_LAYER_KHRONOS_Validation를 찾아서 사용하게 한다.
+        </code>
+    </pre>
+</div>
+
+<p>
+    Vulkan Layer Vaildation은 vkCreateDevice 함수를 호출하기 전 정보를 등록하는 VkDeviceCreateInfo의 enableLayerCount와 ppEnabledLayerNames에 해당 값을 설정해서 사용할 수 있습니다. 아까 vkEnumerateInstanceLayerProperties를 통해 VK_LAYER_KHRONOS_Validation의 사용이 가능하다고 확인을 했으면 등록해도 문제가 없을 것입니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            const std::vector<const char*> requireValidationLayers = { "VK_LAYER_KHRONOS_Validation" }; // 등록할 Validation Layer
+            
+            // 조회를 통해 VK_LAYER_KHRONOS_Validation을 사용 가능함을 확인
+
+            VkDeviceCreateInfo deviceCreateInfo = {};
+            
+            // vkCreateDevice의 필요한 데이터 등록
+
+            struct VkDeviceCreateInfo {
+                ....
+                uint32_t enabledLayerCount; // layerCount를 등록하는 변수
+                const char* const* ppEnableddLayerNames; // layerName 리스트를 제출하는 변수
+            }
+
+            deviceCreateInfo.enabledLayerCount = static_cast<uint32_t>( requireValidationLayers.size() );
+            deviceCreateInfo.ppEnableddLayerNames = requireValidationLayers.data();
+
+            if ( VK_SUCCESS != vkCreateDevice( physicalDevice, &deviceCreateInfo, nullptr, logicalDevice ) )
+            {
+                // 실패 조치...
+            }
+
+        </code>
+    </pre>
+</div>
+
+<p>
+    저는 이 방법을 통해 vkEnumeratePhysicalDevices()의 함수에서 개수 0으로 반환하는 error message를 확인하고 VK_LAYER_AMD_switchable_graphics를 비활성화 하는 환경 설정을 통해 physicalDevice를 조회해서 RTX 3070을 정상적으로 사용할 수 있게끔 수정할 수 있었습니다. 처음 Vulkan을 사용해서 개발을 하다보면 아직 미숙한 점이 많이 있어서 디버깅을 통해서 문제를 해결해야 하는 경우가 많이 있습니다. 그런경우 VK_LAYER_KHRONOS_Validation을 활성해서 개발에 도움이 될 수 있는 에러 메시지 등을 확인할 수 있게 해야 합니다. 그 외에 다른 기능을 사용할 수도 있을 것입니다.
+<p>
