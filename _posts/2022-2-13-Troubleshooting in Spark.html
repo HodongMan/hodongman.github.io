@@ -1,0 +1,64 @@
+---
+layout: post
+title:  "Spark Trouble Shooting"
+subtitle: "스파크 트러블 슈팅 케이스"
+date:   2022-2-13 10:31:27 -0200
+background: '/img/posts/02.jpg'
+---
+
+<h2 class="section-heading">Spark 실행 in Windows</h2>
+
+<p>
+    Spark를 실행하기 위해서 Hadoop의 dfs와 yarn을 실행하던 도중에 예기치 못한 오류를 확인 했습니다. namenode와 datanode는 정상적으로 실행이 되서 문제는 없었습니다. 그런데 ResourceManager와 NodeManager가 실행이 되지 않고 처음 보는 에러 메시지를 확인 했습니다.
+<p>
+
+<p>
+    java.lang.reflect.InaccessibleObjectException: Unable to make private java.nio.DirectByteBuffer(long,int)
+<p>
+
+<p>
+    해당 에러만 봐서는 문제점을 전혀 찾을 수 없었습니다. 보통 이런 알 수 없는 에러가 예전에 Java8->9로 올라갈 때 package 문제를 겪은 적이 있어서 비슷한 것으로 추론하고 확인해봤는데 오 며칠전에 Java17로 버전을 변경한 것이 생각이 났습니다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/sparkerror/spark-java-version.png" alt="Demo Image">
+<span class="caption text-muted">Spark Java Version[Spark Document 참조]</span>
+
+<p>
+    따라서 Java 17 -> 11로 변경하고 실행했더니 문제가 해결되었습니다. 지금은 Windows에서 11와 17을 둘다 설치하고 JAVA_HOME을 변경해가면서 사용하고 있습니다.
+<p>
+
+<h2 class="section-heading">Spark 자원 정리하지 않을 경우 발생하는 Error</h2>
+
+<p>
+    SparkSession 생성 이후 부터는 main 함수에서 종료 시에 정상적으로 자원을 정리하고 종료해야만 알 수 없는 에러가 발생하지 않습니다. AbstractQueuedSynchronizer에서 InterruptedException이 발생하는 알 수 없는 문제가 발생할 수 있습니다. 이는 코드를 제가 직접 확인해 보지는 않았지만 scala 코드와 sbt가 같은 환경에서 실행이 되는데 sbt가 종료되는 경우에 기존에 남아있는 scala Thread가 정리되지 않고 비정상 종료되면서 다음과 같은 EXception을 발생시키지 않을까 생각이 들었습니다. 그래서 해당 예외는 아래 main이 종료됨과 동시에 발생합니다
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            def main(args: Array[String]): Unit = {
+        
+                val sparkSession = SparkSession.builder
+                    .appName("SparkModelServer")
+                    .master("local[3]")
+                    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+                    .config("spark.kryo.registrator", "com.hodong.modelserving.spark.ModelStateRegistrator")
+                    .config("spark.sql.streaming.checkpointLocation", CHECKPOINT_DIR)
+                    .getOrCreate()
+                
+                println(s"Spark Session Builder Success")
+
+        </code>
+    </pre>
+</div>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/sparkerror/spark-interruped-exception.png" alt="Demo Image">
+<span class="caption text-muted">spark-interruped-exception</span>
+
+<p>
+    해결법은 간단합니다. sparkSession이 정상 종료할 수 있게끔 sparkSession.stop()을 호출하면 문제가 해결됩니다. 해당 에러만 보게 되면 스레드의 동기화에 문제가 있을것으로 보여서 찾기가 어려웠습니다. 그리고 동기화 문제는 실제로도 해결하기 어렵기 때문에 기록을 통해서 간단한 사항임을 정리하려고 했습니다.
+<p>
+
+<p>
+    생기면 추가 작성중....
+<p>
