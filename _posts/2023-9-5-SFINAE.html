@@ -1,0 +1,121 @@
+---
+layout: post
+title:  "SFINAE(Substitution failure is not an error)"
+subtitle: "Substitution failure is not an error 알아보기"
+date:   2023-9-5 20:05:32 -0300
+background: '/img/posts/03.jpg'
+---
+
+<h2 class="section-heading">SFINAE(Substitution failure is not an error)</h2>
+
+<p>
+    SFINAE(Substitution failure is not an error)는 문장 그대로 대체 실패는 오류가 아니다 라는 의미입니다. C++에서 template은 Compiler가 사용처를 발견해서 적용이 되는 새로운 type의 함수 등을 추론해서 생성합니다. 이 과정에서 해당 template의 매개변수에 형이나 값을 넣을 수 없어도 오류가 발생하지 않는 상황을 의미합니다. 이는 template 함수 오버로딩에서 주로 발견되며 boost::enable_if에서 제공하는 코드를 참조해서 한번 직접 실행해서 확인해보겠습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            int negativeSomething( const float value ) # 1
+            { 
+                std::cout << "int negativeSomething function call" << std::endl;
+                return -( value + 100 ); 
+            }
+
+            template <typename F>
+            typename F::result_type negativeSomething( const F& value ) # 2
+            { 
+                std::cout << "template negative function call" << std::endl;
+                return -( value + 100 );
+            }
+
+            int main( void )
+            {
+                const int value = 1;
+                int result = negativeSomething( value );
+                std::cout << result << std::endl;
+                return 0;
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    boost document에 따르면 # 1의 정의에 맞는 함수가 있다 하더라도 컴파일러는 추론을 위해 두 정의를 모두 고려해서 프로토 타입을 결정한다는 의미입니다. 따라서 컴파일러는 아래와 같은 코드를 고려할 수 있다고 합니다
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            int::result_type negativeSomething( const int& value )
+            { 
+                std::cout << "template negative function call" << std::endl;
+                return -( value + 100 );
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    물론 결과는 더 적합한 #1 함수가 실행되어서 int negativeSomething function call 문장과 -101 값이 출력이 되었습니다. 이번엔 반대로 적합하지 않은 방식으로 테스트 해보겠습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            template <typename T>
+            T negativeSomething( const T& value ) # 1
+            { 
+                std::cout << "template negative function call" << std::endl;
+                return -value;
+            }
+                
+                
+            int main( void )
+            {
+                    
+                std::cout << negativeSomething( "haha" ) << std::endl;
+                return 0;
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    해당 코드는 # 1의 함수는 input인 const char[]에 적합한 처리를 할 수 없기 때문에 컴파일 에러가 발생합니다. 하지만 그 함수를 원래대로 두고 함수를 하나 추가하겠습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            template <typename T>
+            T negativeSomething( const T& value ) # 1
+            { 
+                std::cout << "template negative function call" << std::endl;
+                return -value;
+            }
+
+            const std::string& negativeSomething( const std::string& value ) # 2
+            { 
+                std::cout << "string negativeSomething function call" << std::endl;
+                return value;
+            }
+                
+            int main( void )
+            {
+                    
+                std::cout << negativeSomething( "haha" ) << std::endl;
+                return 0;
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    해당 코드는 # 1의 함수는 input인 const char[]에 적합한 처리를 할 수 없기 때문에 컴파일 에러가 발생해야 하지만 위의 설명대로 적합한 # 2의 함수를 발견해서 SFINAE 원칙으로 인해 잘못된 처리로 성립되지 않습니다. 단순히 컴파일러가 변환에 적절한 집합으로 여기지 않기 때문에 문제가 없이 넘어갑니다.
+<p>
+
+<h2 class="section-heading">std::enable_if</h2>
+
+<p>
+   SFINAE의 방식을 사용할 수 있도록 도와주는 표준은 std::enable_if 기능이 있습니다. 
+<p>
