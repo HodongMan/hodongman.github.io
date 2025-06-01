@@ -1,0 +1,79 @@
+---
+layout: post
+title:  "vcpkg on visual studio"
+subtitle: "vcpk가 무엇인지에 대한 소개와 실제 visual studio project에 사용하기"
+date:   2025-6-1 10:19:21 -0100
+background: '/img/posts/01.jpg'
+---
+
+<h2 class="section-heading">what is vcpkg</h2>
+
+<p>
+    프로젝트를 개발하는데 있어서 외부 코드를 참조하지 않는 경우는 거의 없습니다. 그래서 대부분의 프로그래밍 언어를 사용해서 개발 하는 경우 외부 코드를 쉽게 import 할 수있는 기능(주로 package manager)이 있습니다. python 프로젝트는 주로 pip를 사용하고 javascript의 경우 에는 npm같은 유명한 패키지 관리자가 있습니다. visual studio를 사용하는 프로젝트에 주로 nuget을 사용하곤 합니다. 하지만 이 패키지 관리자는 주로 C#에 관한 것이 많아서 c++ 프로젝트에서는 좀 아쉬운 면이 있습니다. 그래서 새로운 패키지 관리자를 알아보는 와중에 microsoft에서 개발한 C/C++ 패키지 관리자를 찾았습니다. 이 패키지 관리자는 오픈 소스 라이브러리에 접근하기도 편하고 Cmake, Visual studio에 연동하기도 편합니다. 바로 vcpkg 입니다.
+<p>
+
+<p>
+    vcpkg는 microsoft에서 제공 하는 C/C++ 용도의 Package Manager 입니다. 아무래도 microsoft에서 제공하는 툴인 만큼 Visual Studio와 연동이 그렇게 어렵지 않습니다. 저는 이것이 이 툴을 사용하는 가장 큰 장점 중의 하나라는 생각이 들어서 직접 설치해서 사용하고 그 장단점을 파악해보기로 마음 먹었습니다. 그래서 실제 vcpkg를 설치해서 저에게 필요한 C/C++ 오픈 소스 프로젝트(여기서는 vkBootstrap과 vkMem 관련 라이브러리를 import 하겠습니다)를 직접 가져오고 그것이 어떻게 프로젝트에 포함되는지 확인한 것을 서술하겠습니다.
+<p>
+
+<h2 class="section-heading">install vcpkg and package add</h2>
+
+<p>
+    vcpkg는 github에 Open Source Project로 있습니다. 그리고 설치 또한 해당 페이지에서 git clone으로 진행 해야 합니다. git clone이 성공했다면 해당 프로젝트에 bootstrap-vcpkg.bat 배치 파일을 실행 하는 것으로 설치를 할 수 있습니다. 
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/intro-vcpkg/vcpkg-download.png" alt="Demo Image">
+<span class="caption text-muted">Github Download</span>
+
+<p>
+    프로젝트를 Github에서 다운로드 하는건 어렵지 않습니다. 그 이후에 bootstrap-vcpkg.bat를 아래와 같이 실행 시키면 Windows 기준 적절한 .exe 파일이 실행되고 설치가 완료 됩니다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/intro-vcpkg/bootstrap.png" alt="Demo Image">
+<span class="caption text-muted">bootstrap-vcpkg</span>
+
+<p>
+    Windows 에서는 해당 vcpkg 폴더를 적절한 위치에 옮기고 환경변수에 등록하는 작업이 필요합니다.
+<p>
+
+<p>
+    이 모든 과정이 끝나면 cmd에서 해당 기능을 사용할 수 있습니다. vcpkg가 정상적으로 사용 가능한지 cmd 창을 열어서 직접 확인해 봅시다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/intro-vcpkg/vcpkg--version.png" alt="Demo Image">
+<span class="caption text-muted">vcpkg --version</span>
+
+<p>
+    실제로 오픈 소스 라이브러리를 설치하고 가져오는 작업을 수행해 봅시다. 저는 개인적인 프로젝트를 이유로 vk-bootstrap을 제 프로젝트에 사용하기 위해 vcpkg로 관리하고자 합니다. vcpkg는 프로젝트를 1) vcpkg에 설치 2) 해당 프로젝트에 vcpkg port에 등록 3) 프로젝트에서 vcpkg 정보를 참조해서 해당 프로젝트에 등록 하는 과정으로 작업을 수행합니다. 먼저 vcpkg에 vk-bootstrap을 가져와 보도록 하겠습니다.    
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/intro-vcpkg/vcpkg-install-vk-bootstrap.png" alt="Demo Image">
+<span class="caption text-muted">vcpkg install vk-bootstrap</span>
+
+<p>
+    vcpkg install vk-bootstrap 명령어를 사용해서 vk-bootstrap을 가져왔습니다. 내가 어떤 것을 가져 올 수 있는지는 vcpkg 웹 페이지를 통해서 확인할 수 있습니다. 또한 내가 작업한 결과물을 vcpkg에 등록할 수도 있습니다. 하지만 이 부분은 오늘 주제에 벗어나는 내용이라 서술하진 않겠습니다. 그 다음에는 나의 Visual Studio Project에 등록하는 방법입니다. Visual Studio에 도구 -> 명령줄 -> 개발자 명령 프롬프트 창을 열어서 아래 화면과 같이 vcpkg new --application 명령어를 사용해 봅시다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/intro-vcpkg/vcpkg-new.png" alt="Demo Image">
+<span class="caption text-muted">vcpkg new --application</span>
+
+<p>
+    그 다음에 가져올 라이브러리를 추가 하면 됩니다. vcpkg에서는 가져올 라이브러리를 port로 표현합니다. 그래서 명령어도 vcpkg add port 'project name'과 같이 표현해서 사용합니다. 저는 vk-bootstrap을 가져올 것이기 때문에 vcpkg add port vk-bootstrap을 사용하겠습니다. 그러면 vcpkg.json 파일에 해당 정보가 기록이 됩니다. 아래의 화면처럼 확인이 가능합니다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/intro-vcpkg/vcpkg-json.png" alt="Demo Image">
+<span class="caption text-muted">vcpkg new --application</span>
+
+<p>
+    마지막으로 Visual Studio에서 vcpkg를 사용하기 위해 옵션을 설정하면 됩니다. 프로젝트 -> 속성의 보면 구성속성 항목에 vcpkg가 새로 생겼을 겁니다. 그 항목에서 Use Vcpkg Manifest 항목을 Yes로 변경해서 vcpkg를 사용할 것을 알려줍시다. 그러면 자동으로 감지합니다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/intro-vcpkg/visual-studio-properties.png" alt="Demo Image">
+<span class="caption text-muted">visual studio properties</span>
+
+<p>
+    이렇게 설정을 하면 준비는 끝났습니다. #include 하면 바로 코드를 참조할 수 있습니다. 실제 vcpkg_installed 폴더에 추가한 port가 Visual Studio에 빌드를 누르면 json 파일을 분석해서 추가 합니다. 이 방법으로 저는 vk-bootstrap과 같은 nuget 패키지에도 없고 직접 적용하기 좀 번거로운 라이브러리도 쉽게 추가 했습니다. 다만 nuget에 비해서 설정할 것이 좀 있지만 대규모 프로젝트 이면 .bat 파일에 정리해서 자동화 할 수 있습니다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/intro-vcpkg/project-installed.png" alt="Demo Image">
+<span class="caption text-muted">code install</span>
