@@ -1,0 +1,87 @@
+---
+layout: post
+title:  "Branch Prediction in C++"
+subtitle: "분기 예측 관련된 기능과 cmov"
+date:   2025-10-5 22:22:27 -0300
+background: '/img/posts/03.jpg'
+---
+
+<h2 class="section-heading">분기 예측(Branch Prediction)</h2>
+
+<p>
+    분기 예측(Branch Prediction)은 명령어를 처리하는 파이프라인의 핵심 요소 중 하나 입니다. 만약 분기가 있는 경우 파이프라인은 결정해야 합니다 어떤 명령어를 패치하고 수행해야 하는지! 따라서 이 과정에서 불필요한 사이클 낭비와 최적화를 위해 거의 모든 현대의 CPU는 분기 예측 이라는 기능을 수행하게 됩니다. 프로세서는 명령어를 추측하여 실행 합니다. 추측이 성공한 경우에는 최상의 속도로 작업을 진행할 수 있습니다. 하지만 추측이 틀리다면? 명령어를 취소(writeback)하고 다시 명령어를 수행해야 합니다. 이는 사이클의 낭비를 가져옵니다. 물론 분기 예측을 실행하는 과정은 현대 CPU에서 매우 복잡한 작업 과정 중에 하나입니다. Two-Level Adaptive Predictor혹은 gselect 같은 기능이 있지만 사실 제가 오늘 이 글에서 다루고 싶은 주제는 아니기 때문에 잠시 접어두겠습니다. 하지만 반드시 흥미로울 거에요!
+<p>
+
+<p>
+    분기 예측을 회피할 수 있는 방법도 있습니다. assembly의 cmov 즉 조건부 이동은 분기를 사용하지 않고 조건을 처리할 수 있도록 합니다. 따라서 해당 기능은 분기 예측을 실패하는 경우가 없습니다. 추측이 실패 하지 않으면 여러 이점이 있을것 같지만 Torvalds는 이에 대해 cmov의 성능에 관한 조언을 남겼습니다.
+<p>
+
+<p>
+    다시 분기 예측으로 돌아오면 여기서 if과 삼항 연산자의 주요 차이점을 알 수 있습니다. 이 두 가지의 가장 큰 차이점은 if는 분기 예측을 지원하는 명령어(여기서는 je 입니다.)로 변환이 된다는 것이고 삼항 연산자는 조건부 이동(cmov)로 변환이 된다는 점입니다. 하지만 이는 컴파일러 최적화 옵션에 따라 달라질 수 있습니다. 위에 서술한 Torvalds의 조언 때문일까요 gcc에서는 cmov 대신 다른 방식으로 대안이 된다고 합니다(사실 제가 정확히 확인해 본것은 아닙니다만) 그래서 직접 변환되는 것을 확인해 보는게 좋겠습니다. Visual Studio의 Assembly 디버깅 기능을 통해서 한번 확인해 보겠습니다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/branch-prediction/je.png" alt="JE Assembly">
+<span class="caption text-muted">if - JE Assembly</span>
+
+<p>
+    if문을 사용하면 일반적으로 분기 예측을 적용할수 있는(je, jne) Assembly로 변환됩니다. 이는 어셈블리에서 분기 예측을 사용하는 명령어 입니다. Visual Studio의 디스어셈블리 기능으로 디버깅을 하면 변환 여부를 확인할 수 있습니다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/branch-prediction/cmov.png" alt="CMOV Assembly">
+<span class="caption text-muted">cmov Assembly</span>
+
+<p>
+    삼항 연사자를 사용하면 일반적으로 분기 이동을 사용하는 명령어(cmov) Assembly로 변환됩니다. 이는 어셈블리에서 분기 예측이 아닌 조건부 이동을 사용하는 명령어 입니다. Torvals는 예전이긴 하지만 cmov의 성능에 관하여 좋은 이야기를 남겼습니다(https://yarchive.net/comp/linux/cmov.html)
+<p>
+
+<h2 class="section-heading">Likely in C++</h2>
+
+<p>
+    C++20에서는 Branch Prediction을 처리할 수 있는 기능을 제공합니다. 컴파일러에게 분기 예측에 관한 힌트를 제공할 수 있는데요 [[likely]] 라고 하는 기능입니다. 해당 속성을 붙일 수 있는 곳(jump 명령어가 수행이 가능한 지점)에 붙이기 바랍니다. 
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            if (condition) [[likely]]
+            {
+                return lhs + templhs;
+            }
+            else
+            {
+                return rhs + temprhs;
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    [[likely]] 속성을 부여하면, 컴파일러가 자주 실행될 경로를 fall-through 경로(즉, 점프 없이 직진하는 코드) 로 배치합니다. 결과적으로 조건문이 je 형태로 바뀌어 보일 수 있습니다. 사용법은 매우 간단하지만 적절한 상황인지에 대한 판단은 항상 어렵겠네요. 때로는 명백한 경우를 제외하고는 CPU 장비와 컴파일러를 믿는 경우가 더 낫다는 것이 왠지 지금 상황인 것 같습니다. 저는 간단하게 실제로 변경이 되는지만 확인할 거에요. 다시 한번 Visual Studio의 디스어셈블리 기능으로 확인해 보겠습니다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/branch-prediction/likely.png" alt="[[likely]]">
+<span class="caption text-muted">likely 변환 -> je</span>
+
+<p>
+    je로 변환이 된 것으로 보아서 기능을 정상적으로 작동한 것으로 보이네요! 반대로 [[unlikely]] 또한 정상적으로 적용되는지 확인이 필요 합니다. jne는 je의 반대 기능을 수행합니다. 따라서 디스어셈블리 결과가 jne를 보여준다면 기대했던 결과이며 속성이 잘 적용된다고 볼 수 있겠네요
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/branch-prediction/unlikely.png" alt="[[likely]]">
+<span class="caption text-muted">unlikely 변환 -> jne</span>
+
+<p>
+    일단 예상했던 결과를 확인했습니다. 마지막으로 Torvalds의 조언에 따라서 실제로 cmov가 성능적으로 이슈가 있는지 명백하게는 확인하기가 어렵습니다만 간단한 테스트를 통해서 보고만 가겠습니다.
+<p>
+
+<h2 class="section-heading">Performance Test</h2>
+
+<p>
+    Performance를 체크하기 위해서 100만번의 횟수동안 likely를 통해 전부 분기 예측에 성공한 경우(분기를 무조건 true) / 분기 예측에 실패한 경우(분기를 무조건 false) / cmov를 통해서 처리한 경우를 세 가지를 한번 chrono로 시간을 체크하겠습니다.
+<p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/branch-prediction/Performance.png" alt="[[likely]]">
+<span class="caption text-muted">Torvalds는 틀리지 않았다...</span>
+
+<p>
+    일단 제 PC에서의 결과는 Torvalds의 말이 정확하다는 것을 보여줬습니다. 물론 gcc나 다른 OS환경에서 테스트는 아니어서 모든 경우에서 그렇다 하기에는 어렵긴 하겠지만 cmov가 적어도 성능 문제가 있을 수 있다는 것은 특정 환경에서는 그럴 수 있다고 생각이 들긴 하네요.
+<p>
