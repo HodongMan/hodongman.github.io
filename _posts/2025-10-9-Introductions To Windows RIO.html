@@ -37,7 +37,7 @@ background: '/img/posts/01.jpg'
             setsockopt( listenSocket, SOL_SOCKET, SO_REUSEADDR, ( const char* )&reuse, sizeof( reuse ) );
 
             BOOL nodelay = TRUE;
-            setsockopt( listenSocket, SOL_SOCKET, TCP_NODELAY, ( const char* )&nodelay, sizeof( nodelay ) );
+            setsockopt( listenSocket, IPPROTO_TCP, TCP_NODELAY, ( const char* )&nodelay, sizeof( nodelay ) );
 
             int32_t ackFrequency                = 1;
             DWORD bytes                         = 0;
@@ -78,17 +78,6 @@ background: '/img/posts/01.jpg'
 
         #define WSAID_MULTIPLE_RIO /* 8509e081-96dd-4005-b165-9e2ee8c79e3f */ \
             {0x8509e081,0x96dd,0x4005,{0xb1,0x65,0x9e,0x2e,0xe8,0xc7,0x9e,0x3f}}
-
-        // RIOFunctionTable을 가져오는 과정
-        GUID guid = WSAID_ACCEPTEX;
-        DWORD bytes = 0;
-
-        int32_t result = ::WSAIoctl( listenSocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof( guid ), &_acceptEx, sizeof( _acceptEx ), &bytes, nullptr, nullptr );
-        if ( SOCKET_ERROR == result )
-        {
-            logError( "SIO_GET_MULTIPLE_EXTENSION_FUNCTION_POINTER error" );
-            return false;
-        }
         </code>
     </pre>
 </div>
@@ -181,7 +170,7 @@ background: '/img/posts/01.jpg'
     <pre class="highlight">
         <code>
             // 첫 인자는 QueueSize 두번째 인자는 PRIO_NOTIFICATION_COMPLETION
-            RIO_CQ completionQueue = _rioFunctionTable.RIOCreateCompletionQueue( 1024, _notify );
+            RIO_CQ completionQueue = _rioFunctionTable.RIOCreateCompletionQueue( 1024, &_notify );
             if ( RIO_INVALID_CQ == completionQueue )
             {
                 logError( "RIOCreateCompletionQueue error" );
