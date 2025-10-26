@@ -1,0 +1,360 @@
+---
+layout: post
+title:  "Introductions To Windows RIO"
+subtitle: "Windows Registered IO에 관한 기초 소개"
+date:   2025-10-9 23:41:09 -0100
+background: '/img/posts/01.jpg'
+---
+
+<h2 class="section-heading">Windows Registered IO란 무엇입니까</h2>
+
+<p>
+    Windows Registered IO(RIO)는 Winsock의 새로운 기능입니다. Windows 8 혹은 Windows Server 2012부터 사용할 수 있습니다. 제공된 API 설명 문서에 따르면 RIO는 네트워크 지연 시간을 줄이고 메시지 전송 속도를 높이며 응답 시간의 예측 가능성을 향상시킬 수 있는 기회를 제공합니다. 이로 인해서 지터와 지연 시간을 줄이면서 더 높은 초당 입출력(IOPS)을 달성할 수 있습니다. (개론은 이후에 좀 더 추가하겠습니다)
+<p>
+
+<h2 class="section-heading">RIO API 살펴보기</h2>
+
+<p>
+    RIO API를 사용하는 WSASocket은 IOCP처럼 flag를 추가 해야 합니다. WSA_FLAG_REGISTERED_IO 해당 WSASocket의 마지막 인자 DWORD dwFlags에 전달합니다. 뒤에 후술하겠지만 해당 글에서 RIO API는 CompletionPort의 시스템 콜을 같이 사용하는 방식으로 소개할 예정입니다. 따라서 IOCP의 flag인 WSA_FLAG_OVERLAPPED도 같이 추가할 것입니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            SOCKET listenSocket = ::WSASocket( AF_INET, SOCK_STREAM, IPPROTO_TCP, nullptr, 0, WSA_FLAG_REGISTERED_IO | WSA_FLAG_OVERLAPPED );
+        </code>
+    </pre>
+</div>
+
+<p>
+    RIO API와 직접적인 관련은 없지만 Socket을 테스트 코드로 사용하는데 빠른 반응은 중요합니다. 그래서 TCP의 빠른 반응을 사용하기 위해서 옵션을 활성화 할 필요가 있습니다. 실제로 필요한 옵션은 크게 두 가지가 있습니다. 하나는 널리 알려진 Nagle Algorithm을 사용하지 않는 TCP_NODELAY 옵션 입니다. 다른 하나는 DelayedAck라고 일반적으로 알고 있는 지연된 반응을 사용하지 않는 옵션 입니다. 이것은 공통된 옵션이 아니라서 Windows에서와 다른 OS에서의 명칭은 다릅니다. Windows에서는 SIO_TCP_SET_ACK_FREQUENCY 라는 옵션으로 해당 기능을 조정할 수 있습니다. 이 부분도 이야기 할 부분이 분명히 있습니다만 이 글의 주제와 벗어나는 내용이 될 수 있기 때문에 코드만 간단하게 공유하고 넘어가도록 하겠습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            BOOL reuse = TRUE;
+            setsockopt( listenSocket, SOL_SOCKET, SO_REUSEADDR, ( const char* )&reuse, sizeof( reuse ) );
+
+            BOOL nodelay = TRUE;
+            setsockopt( listenSocket, SOL_SOCKET, TCP_NODELAY, ( const char* )&nodelay, sizeof( nodelay ) );
+
+            int32_t ackFrequency                = 1;
+            DWORD bytes                         = 0;
+
+            int32_t result                      = ::WSAIoctl( listenSocket, SIO_TCP_SET_ACK_FREQUENCY, &ackFrequency, sizeof( ackFrequency ), nullptr, 0, &bytes, nullptr, nullptr );
+            if ( SOCKET_ERROR == result )
+            {
+                logError( "SIO_TCP_SET_ACK_FREQUENCY Error" );
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+   그 다음은 RIO API를 사용하는데 필수적인 RIO_EXTENSION_FUNCTION_TABLE 개채를 사용할 수 있는 준비를 해야 합니다. 다른 시스템 콜과는 다르게 RIO API는 거의 RIO_EXTENSION_FUNCTION_TABLE에 사용할 수 있는 함수 포인터 형태로 struct가 있습니다. 내용은 아래와 같습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+        typedef struct _RIO_EXTENSION_FUNCTION_TABLE {
+            DWORD cbSize;
+
+            LPFN_RIORECEIVE RIOReceive;
+            LPFN_RIORECEIVEEX RIOReceiveEx;
+            LPFN_RIOSEND RIOSend;
+            LPFN_RIOSENDEX RIOSendEx;
+            LPFN_RIOCLOSECOMPLETIONQUEUE RIOCloseCompletionQueue;
+            LPFN_RIOCREATECOMPLETIONQUEUE RIOCreateCompletionQueue;
+            LPFN_RIOCREATEREQUESTQUEUE RIOCreateRequestQueue;
+            LPFN_RIODEQUEUECOMPLETION RIODequeueCompletion;
+            LPFN_RIODEREGISTERBUFFER RIODeregisterBuffer;
+            LPFN_RIONOTIFY RIONotify;
+            LPFN_RIOREGISTERBUFFER RIORegisterBuffer;
+            LPFN_RIORESIZECOMPLETIONQUEUE RIOResizeCompletionQueue;
+            LPFN_RIORESIZEREQUESTQUEUE RIOResizeRequestQueue;
+        } RIO_EXTENSION_FUNCTION_TABLE, *PRIO_EXTENSION_FUNCTION_TABLE;
+
+        #define WSAID_MULTIPLE_RIO /* 8509e081-96dd-4005-b165-9e2ee8c79e3f */ \
+            {0x8509e081,0x96dd,0x4005,{0xb1,0x65,0x9e,0x2e,0xe8,0xc7,0x9e,0x3f}}
+
+        // RIOFunctionTable을 가져오는 과정
+        GUID guid = WSAID_ACCEPTEX;
+        DWORD bytes = 0;
+
+        int32_t result = ::WSAIoctl( listenSocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof( guid ), &_acceptEx, sizeof( _acceptEx ), &bytes, nullptr, nullptr );
+        if ( SOCKET_ERROR == result )
+        {
+            logError( "SIO_GET_MULTIPLE_EXTENSION_FUNCTION_POINTER error" );
+            return false;
+        }
+        </code>
+    </pre>
+</div>
+
+<p>
+    해당 기능을 호출하려면 AcceptEx나 ConnectionEx 계열의 함수를 사용할 수 있을 때 처럼 WSAID_MULTIPLE_RIO의 GUID로 WSAIoctl 함수를 호출하면 가능합니다. 한번만 가져와서 계속 사용할 수 있기 때문에 염두에 두고 개채의 저장 위치를 생각하면 좋을것 같습니다. 코드는 아래와 같습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            SOCKET socket = ::WSASocket( AF_INET, SOCK_STREAM, IPPROTO_TCP, nullptr, 0, WSA_FLAG_REGISTERED_IO | WSA_FLAG_OVERLAPPED );
+            assert( INVALID_SOCKET != socket );
+
+            GUID guid = WSAID_MULTIPLE_RIO;
+            DWORD bytes = 0;
+
+            int32_t result = ::WSAIoctl( socket, SIO_GET_MULTIPLE_EXTENSION_FUNCTION_POINTER, &guid, sizeof( guid ), &_rioFunctionTable, sizeof( _rioFunctionTable ), &bytes, nullptr, nullptr );
+            assert( SOCKET_ERROR != result );
+        </code>
+    </pre>
+</div>
+
+<p>
+    RIO API에서 Notification을 처리하는 방식은 총 3가지가 있습니다. 하나는 RIO API의 고유 기능을 이용해서 Polling 방식으로 처리하는 방식. 두 번째는 Windows의 Event 개채를 이용해서 처리하는 방식 마지막 하나는 IOCP의 기능을 같이 사용해서 처리하는 방식입니다. 위 기능을 정리하면은 API를 통해 IO를 읽는 방식은 RIO API로 동일하지만 Noti를 받는 방식만 사용하지 않을것인지 / Event Handle을 사용 / IOCP Handle로 차이가 있습니다. 
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            typedef enum _RIO_NOTIFICATION_COMPLETION_TYPE {
+                RIO_EVENT_COMPLETION      = 1,
+                RIO_IOCP_COMPLETION       = 2,
+            } RIO_NOTIFICATION_COMPLETION_TYPE, *PRIO_NOTIFICATION_COMPLETION_TYPE;
+        </code>
+    </pre>
+</div>
+
+<p>
+    이 소개글에서는 IOCP Handle을 사용한 방식을 사용하려고 합니다. Event Handle은 많은 IO 처리를 동시에 하기에 내부에 제한(64개로 알고 있는데 정확하진 않네요)이 존재합니다. Polling을 사용하는 방식은 시스템콜도 훨씬 적고 저지연 처리에 유리하지만 Polling의 본래 단점을 가지고 있습니다. 따라서 IOCP를 사용하는 방식으로 소개하겠습니다. 
+<p>
+
+<p>
+    IOCP를 사용하는 방식으로는 기본적으로 IOCP를 사용하는 방식과 같이 CreateIOCompletionPort로 Handle을 생성해야 합니다. 그리고 Listen Socket과 Accept로 연결하는 Socket에 각각 CreateIOCompletionPort를 호출해서 Handle에 엮어야 합니다. 그 이후에 RIO_NOTIFICATION_COMPLETION에서 데이터를 설정해야 합니다. RIO_NOTIFICATION_COMPLETION의 Type 인자에 RIO_IOCP_COMPLETION를 설정하고 IOCP 인자에 IocpHandle에 Handle값, CompletionKey, Overlapped에 OVERLAPPED 개채를 넣고 초기화를 하는 것으로 합니다. 물론 Event 처리는 RIO_EVENT_COMPLETION를 넣고 Event Handle만 데이터 전달하면 됩니다. Polling을 사용하는 경우에는 데이터 적용할 필요 없이 RIOCreateCompletionQueue에 nullptr을 전달하면 됩니다. 
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            // handle 생성
+            HANDLE iocpHandle					= ::CreateIoCompletionPort( INVALID_HANDLE_VALUE, nullptr, 0, 0 );
+            if ( INVALID_HANDLE_VALUE == iocpHandle )
+            {
+                logError( "CreateIoCompletionPort Create error" );
+                return false;
+            }
+
+            // listen socket join
+            if ( iocpHandle != ::CreateIoCompletionPort( ( HANDLE )listenSocket, iocpHandle, listenCompletionKey, 0 ) )
+            {
+                logError( "CreateIoCompletionPort Join error" );
+                return false;
+            }
+
+            // accept socket join
+            if ( iocpHandle != ::CreateIoCompletionPort( ( HANDLE )socket, iocpHandle, acceptCompletionKey, 0 ) )
+            {
+                logError( "CreateIoCompletionPort Join error" );
+                return false;
+            }
+
+            ZeroMemory( &connection._notify, sizeof( connection._notify ) );
+
+            // notify 개채 정보
+            // RIO_NOTIFICATION_COMPLETION _notify = {};
+
+            _notify.Type = RIO_IOCP_COMPLETION; // IOCP를 사용하는 type임을 명시
+            _notify.Iocp.IocpHandle = connection._iocpHandle; // iocp handle 생성한 데이터 전달
+            _notify.Iocp.CompletionKey = ( PVOID )connectIndex; // int value
+            _notify.Iocp.Overlapped = &connection._overlapped; // 미리 생성한 Overlapped 정보 
+        </code>
+    </pre>
+</div>
+
+<p>
+    이 다음 단계로는 RIO API의 CompletionQueue와 RequestQueue를 생성하는 단계 입니다. 기존의 IO를 처리하는 방식(Ex IOCP, epoll)과 새로운 방식(Windows RIO, io_uring)의 가장 큰 차이점 중 하나는 Request를 처리하는 Queue와 Completion을 처리하는 Queue가 분리되어 기능을 제공한다는 점입니다. IOCP와 RIO의 기능을 비교 했을 때도 이 차이점이 크게 두드러 집니다. 생성하는 방식은 RIO API 호출해서 별도의 개채인 RIO_RQ, RIO_CQ를 통해 가지고 있을 수 있습니다. 처음 기본 코드를 작성할때는 필요 없을 수 있지만 RequestQueue는 SOCKET 개채에 대응이 되어야 합니다. 사실상 TCP를 사용하는 경우 Connection과 1:1 매칭이 되도록 API를 사용 하게 되어 있습니다. 반면에 CompletionQueue는 전체 1개를 두고 스레드 별로 경쟁해서 가져 오거나 혹은 스레드 별로 개수를 조정해서 경쟁을 피하는 방법으로 사용할 수도 있습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            // 첫 인자는 QueueSize 두번째 인자는 PRIO_NOTIFICATION_COMPLETION
+            RIO_CQ completionQueue = _rioFunctionTable.RIOCreateCompletionQueue( 1024, _notify );
+            if ( RIO_INVALID_CQ == completionQueue )
+            {
+                logError( "RIOCreateCompletionQueue error" );
+                return false;
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    첫번째 인자는 QueueSize를 넘겨주면 됩니다. 두번째 인자는 IOCP를 보조로 사용하는 방식에서 유효한 방식입니다. 위에서 작성해둔 RIO_NOTIFICATION_COMPLETION를 인자로 넘겨야 합니다. 이 순서나 인자가 맞지 않으면 이후에 Client에서 Accept 이후에 정상적으로 전송 하였다 하더라도 GetQueuedCompletionStatus에서 응답을 받을 수 없게 됩니다. 물론 RIO Polling 방식을 사용하면 두번째 인자를 전달할 필요는 없습니다. 하지만 이 글에서의 예시는 IOCP를 사용하는 것이기 때문에 전달해야 하겠습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            connection._requestQueue = _rioFunctionTable.RIOCreateRequestQueue( connection._socket, 16, 1, 16, 1, completionQueue, completionQueue, nullptr );
+            if ( RIO_INVALID_RQ == connection._requestQueue )
+            {
+                logError( "RIOCreateRequestQueue error" );
+                return 0;
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    두번째와 네번째 인자(MaxOutstandingReceive, MaxOutstandingSend)는 샘플 코드 이기 때문에 작은 수를 넣었습니다만 나중에 스레드 별로 확장하거나 코어 수를 제대로 활용하려면 더 큰 값을 사용해도 괜찮을 것 같습니다. MaxReceiveDataBuffers와 MaxSendDataBuffers는 1이외의 값은 정상적이지 않은 것 같아서 이 부분은 나중에 찾아보겠습니다. ReceiveCQ와 SendCQ는 특별히 구분하지 않아서 동일하게 생성한 CompletionQueue로 처리 했습니다. 지금은 멀티 스레드를 고려 하지 않아서 간단하게 생성만 하고 있지만 실제 사용하려면 이 부분을 반드시 고려해야 합니다. RequestQueue는 SOCKET과 1:1 매칭 해야 하기 때문에 고민을 할 여지가 없이 Connection 개채에서 관리하면 됩니다. CompletionQueue는 조금 고민이 필요하겠네요.
+<p>
+
+<p>
+    그 다음에 이야기할 API는 RIORegisterBuffer 입니다. 말 그대로 Buffer를 미리 등록하는 것으로 IOCP에서는 비슷한 기능이 없습니다. 중요한 것은 반환 값인데 RIO_BUFFERID를 반환합니다. 첫번째 인자로 넘긴 버퍼를 등록하고 해당 식별자를 반환하는 것입니다. 이 기능은 Buffer를가 등록되면 Buffer를가 포함된 가상 메모리 페이지가 실제 메모리에 잠긴다고 합니다. 이 데이터 들은 RIOSend, RIOReceive를 활용할 때 필요합니다. 같이 활용하는 데이터가 RIO_BUF라는 개채입니다. IOCP의 OVERLAPPED라는 개채와 비슷한 역할을 한다고 저는 이해했습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            connection._buf	= ( char* )VirtualAlloc( nullptr, connection._bufSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
+            assert( nullptr != connection._buf );
+
+            connection._bufferId = _rioFunctionTable.RIORegisterBuffer( connection._buf, connection._bufSize );
+            if ( RIO_INVALID_BUFFERID == connection._bufferId )
+            {
+                logError( "RIORegisterBuffer error" );
+                return false;
+            }
+
+            // 등록된 버퍼를 사용해서 RIOReceive(Accept 이후에 호출해야 합니다.) RIOSend
+            RIO_BUF rioBuf = {};
+            rioBuf.BufferId = connection._bufferId;
+            rioBuf.Offset = 0;
+            rioBuf.Length = connection._bufSize;
+
+            if ( false == _rioFunctionTable.RIOReceive( connection._requestQueue, &rioBuf, 1, 0, ( PVOID )RequestType::RECV ) )
+            {
+                logError( "RIOReceive error" );
+                return false;
+            }
+
+            if ( ! _rioFunctionTable.RIOSend( connection._requestQueue, &rioBuf, 1, 0, ( PVOID )RequestType::SEND ) )
+            {
+                logError( "RIOSend error" );
+                return false;	
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    다음은 RIONotify입니다. 해당 API는 인자를 RIO_CQ를 인자로 필요합니다. 해당 함수는 1) CompletionQueue를 처음 생성 했을 때 2) CompletionQueue의 상태가 변하는 경우(데이터가 없다가 -> 채워진 경우 / 데이터가 있는데 -> 다 가져와서 비워진 경우) 두 가지 경우에 호출해야 합니다. 만약 그에 맞춰 호출을 하지 않으면 IOCP를 사용하는 방식에서는 GetQueuedCompletionStatus에서 응답이 정상적으로 오지 않는 현상이 발생합니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            
+            // 최초에 호출하거나
+            int32_t error = _rioFunctionTable.RIONotify( completionQueue );
+            if ( NO_ERROR != error )
+            {
+                logError( "RIONotify error" );
+                return 0;
+            }
+
+            // completionQueue 처리 이후 호출
+
+            DWORD notiBytes = 0;
+            ULONG_PTR notiKey = 0;
+            LPOVERLAPPED notiOverlapped = nullptr;
+
+            if ( false == ::GetQueuedCompletionStatus( iocpHandle, &notiBytes, &notiKey, &notiOverlapped, INFINITE ) )
+            {
+                logError( "GetQueuedCompletionStatus error" );
+                return 0;
+            }
+
+            ...
+
+            // RIODequeueCompletion에서 모든 데이터를 가져온 이후 다시 호출
+            int32_t error = _rioFunctionTable.RIONotify( completionQueue );
+            if ( NO_ERROR != error )
+            {
+                logError( "RIONotify error" );
+                return 0;
+            }
+
+        </code>
+    </pre>
+</div>
+
+<p>
+    마지막으로 RIODequeueCompletion에 대해서 살펴보겠습니다. 해당 API는 CompletionQueue에서 IO 영향으로 처리해야 할 사안이 발생하면 가져올 수 있습니다. IOCP의 GetQueuedCompletionStatus와 가장 큰 차이점은 데이터를 n개를 가져올 수 있다는 점입니다. 함수의 리턴값이 n을 반환하게 되고 두번째 인자로 RIORESULT의 Array를 전달하면 이 인자로 결과 값을 가져올 수 있습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            // 먼저 GetQueuedCompletionStatus를 통해 IO가 발생하였는지 여부를 확인
+            DWORD notiBytes	= 0;
+            ULONG_PTR notiKey = 0;
+            LPOVERLAPPED notiOverlapped = nullptr;
+
+            if ( false == ::GetQueuedCompletionStatus( connection._iocpHandle, &notiBytes, &notiKey, &notiOverlapped, INFINITE ) )
+            {
+                logError( "GetQueuedCompletionStatus error" );
+                return 0;
+            }
+
+            RIORESULT results[ 64 ];
+            int32_t n = 0;
+
+            while ( 0 < ( n	= _rioFunctionTable.RIODequeueCompletion( completionQueue, results, _countof( results ) ) ) )
+            {
+                for ( int32_t ii = 0; ii < n; ++ii )
+                {
+                    const RIORESULT& result	= results[ ii ];
+                    if ( NO_ERROR != result.Status || 0 == result.BytesTransferred )
+                    {
+                        return false;
+                    }
+                }
+                
+                // result.RequestContext의 정보로 Context를 확인할 수 있으며
+                // Context에 연결되어 있는 아까 등록한 buf에서 데이터를 확인할 수 있습니다.
+                // std::printf( "Client Receive data = %s\n", connection._buf );
+
+                //... 이후에 전달받은 데이터로 IO 요청을 처리
+            }
+
+            // CompletionQueue의 상태가 변경(차 있음 -> 비었음)되어서 RIONotify를 호출해야 한다.
+            int32_t error = _rioFunctionTable.RIONotify( completionQueue );
+            if ( NO_ERROR != error )
+            {
+                logError( "RIONotify error" );
+                return 0;
+            }
+
+        </code>
+    </pre>
+</div>
+
+<p>
+    간단하게 RIO API를 IOCP를 결합해서 사용하는 방식에 대해서 정말 기초적인 순서를 탐구 했습니다. 물론 이 내용으로 실제 Game Server 혹은 대량의 UDP 요청을 처리하는 어플리케이션을 작성하기는 부족하지만 개괄적인 흐름이 이해하는데 도움이 되었으면 합니다. 나중에 기회가 되면 IOWorkerThread를 여러개 활용하는 방식이나 좀 더 견고한 방식을 공유할 수 있었으면 합니다
+<p>
+
+<p>
+    도움이 되는 자료들
+<p>
+
+<p>
+    https://learn.microsoft.com/ko-kr/windows/win32/winsock/what-s-new-for-windows-sockets-2?redirectedfrom=MSDN
+<p>
+
+<p>
+    https://serverframework.com/asynchronousevents/2011/10/windows-8-registered-io-networking-extensions.html
+<p>
