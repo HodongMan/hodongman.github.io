@@ -15,7 +15,7 @@ background: '/img/posts/01.jpg'
 <h2 class="section-heading">RIO API 살펴보기</h2>
 
 <p>
-    RIO API를 사용하는 WSASocket은 IOCP처럼 flag를 추가 해야 합니다. WSA_FLAG_REGISTERED_IO 해당 WSASocket의 마지막 인자 DWORD dwFlags에 전달합니다. 뒤에 후술하겠지만 해당 글에서 RIO API는 CompletionPort의 시스템 콜을 같이 사용하는 방식으로 소개할 예정입니다. 따라서 IOCP의 flag인 WSA_FLAG_OVERLAPPED도 같이 추가할 것입니다.
+    RIO API를 사용하는 WSASocket은 IOCP처럼 flag를 추가 해야 합니다. WSA_FLAG_REGISTERED_IO 해당 WSASocket의 마지막 인자 DWORD dwFlags에 전달합니다. 뒤에 후술하겠지만 해당 글에서 RIO API는 CompletionPort의 시스템 콜을 같이 사용하는 방식으로 소개할 예정입니다. 따라서 IOCP의 flag인 WSA_FLAG_OVERLAPPED도 같이 추가할 것입니다. 물론 Accept Disconnect 기능은 IOCP에서 수행하지만 그래도 정상 통지를 받으려면 Listen Socket에도 RIO Flag를 적용해야 합니다. 
 <p>
 
 <div class="highlighter-rouge">
@@ -202,7 +202,7 @@ background: '/img/posts/01.jpg'
 <p>
 
 <p>
-    그 다음에 이야기할 API는 RIORegisterBuffer 입니다. 말 그대로 Buffer를 미리 등록하는 것으로 IOCP에서는 비슷한 기능이 없습니다. 중요한 것은 반환 값인데 RIO_BUFFERID를 반환합니다. 첫번째 인자로 넘긴 버퍼를 등록하고 해당 식별자를 반환하는 것입니다. 이 기능은 Buffer를가 등록되면 Buffer를가 포함된 가상 메모리 페이지가 실제 메모리에 잠긴다고 합니다. 이 데이터 들은 RIOSend, RIOReceive를 활용할 때 필요합니다. 같이 활용하는 데이터가 RIO_BUF라는 개채입니다. IOCP의 OVERLAPPED라는 개채와 비슷한 역할을 한다고 저는 이해했습니다.
+    그 다음에 이야기할 API는 RIORegisterBuffer 입니다. 말 그대로 Buffer를 미리 등록하는 것으로 IOCP에서는 비슷한 기능이 없습니다. 중요한 것은 반환 값인데 RIO_BUFFERID를 반환합니다. 첫번째 인자로 넘긴 버퍼를 등록하고 해당 식별자를 반환하는 것입니다. 이 기능은 Buffer를가 등록되면 Buffer를가 포함된 가상 메모리 페이지가 실제 메모리에 잠긴다고 합니다. 이 표현의 의미는 Registered Buffer는 DMA로 직접 접근되는 영역이므로 VirtualFree로 해제하기 전까지 주소 변경 불가(non-relocatable) 해야 하며 OS가 페이지 아웃하지 않도록 locked 상태로 유지됩니다. 이 데이터 들은 RIOSend, RIOReceive를 활용할 때 필요합니다. 같이 활용하는 데이터가 RIO_BUF라는 개채입니다. IOCP의 OVERLAPPED라는 개채와 비슷한 역할을 한다고 저는 이해했습니다.
 <p>
 
 <div class="highlighter-rouge">
@@ -247,13 +247,15 @@ background: '/img/posts/01.jpg'
     <pre class="highlight">
         <code>
             
-            // 최초에 호출하거나
+            // CompletionQueue 생성 이후 최초에 호출
             int32_t error = _rioFunctionTable.RIONotify( completionQueue );
             if ( NO_ERROR != error )
             {
                 logError( "RIONotify error" );
                 return 0;
             }
+
+            ...
 
             // completionQueue 처리 이후 호출
 
