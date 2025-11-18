@@ -1,0 +1,225 @@
+---
+layout: post
+title:  "Introductions To io_uring through RIO"
+subtitle: "io_uring 기본 탐구 - RIO와 연관지어서"
+date:   2025-11-17 21:05:56 -0300
+background: '/img/posts/03.jpg'
+---
+
+<h2 class="section-heading">io_uring에 관한 이해</h2>
+
+<p>
+    간단하게 설명하면 Window Registered IO가 Linux Kernal에서 비슷하게 사용할 수 있는 것이 io_uring 입니다. Linux Kernal 5.11 부터 정식 지원하고 5.16 부터 문제 없이 사용할 수 있습니다.
+<p>
+
+<p>
+    io_uring에 관한 설명은 추후 추가 예정...
+<p>
+
+<h2 class="section-heading">io_uring vs RIO 비교해 볼 점</h2>
+
+<p>
+    Windows Registered IO의 사용에서 여러 차이점이 있습니다만 직접 사용해본 경험으로는개발 시에 참고할 만한 몇 가지 점이 있습니다. 지금 부터 그 사항들에 대해서 알아보겠습니다. 
+<p>
+
+<p>
+    RIO와 IOCP를 연동하게 되면 Accept와 Disconnect는 IOCP에서 처리 해야 하고 Send / Receive는 각각 RIOSend RIOReceive를 통해 처리 해야 합니다. 따라서 IOCP 기능을 이미 만들어 놓았다면 추가로 두 함수만 변경하면 됩니다. 하지만 사용 중에는 IOCP 기능과 섞여 있기 때문에 다소 헷갈릴 수 있습니다. io_uring은 Accept Receive Send 모두 io_uring에서 기능을 제공합니다( io_uring_prep_accept / io_uring_prep_readv / io_uring_prep_writev) 따라서 Epoll을 조합해서 하는 거 없이 순수하게 io_uring의 기능만으로 완전히 대체할 수 있습니다.
+<p>
+
+<p>
+    RIO와 io_uring은 모두 Send와 Completion을 각각 Queue로 분리해서 사용하는 공통점이 있습니다. 하지만 관리와 이름은 조금 다릅니다. RIO는 CompletionQueue와 RequestQueue로 나누고 CompletionQueue는 구독하는 IOThread에 영향을 받게끔(Thread당 하나의 처리 / 여러 Thread가 구독하면 동기화 개채를 사용해야 합니다.) 되어 있고 RequestQueue는 연결된 Socket당 하나로 처리할 수 있습니다. 따라서 정리하면 RIO에서 CompletionQueue는 Thread 처리당 1 ~ 스레드 개수(N)을 보통 가지고 RequestQueue는 연결된 커넥션 수(N) 만큼 있습니다. 반면에 struct io_uring은 io_uring_cqe와 io_uring_sqe를 포함하는 개채(io_uring_cq, io_uring_sq) 두 가지를 들고 있습니다. cqe와 sqe는 기본적으로 SPSC(Single Producer Single Comsumer) 형태의 Lock-Free Queue 이기 때문에 여러 Thread에서 하나의 개채를 사용 하더라도 동기화의 문제는 없지만 성능 상의 문제가 있을 수 있습니다. 그리고 개수에 따라 Linux 내부에서 별도의 공간을 잘 할당해서 겹칠 일이 없도록 합니다(init 함수) 따라서 처리하는 IO Thread 당 하나를 두는 것이 적합 하겠습니다.
+</p>
+
+<h2 class="section-heading">io_uring 사용해 보기</h2>
+
+<p>
+    liburing을 사용하기 때문에 그 library 사항에 맞춰서 코드를 작성하겠습니다. Single Thread 기반으로 간단하게 Echo Server를 통해서 파악하도록 하겠습니다. 
+<p>
+
+<p>
+    먼저 io_uring 개채를 선언하고 초기화 해야 합니다. 초기화 하는 함수는 io_uring_queue_init 함수 입니다. 각각 Entry Queue Size, struct io_uring, entry flag인데 저는 flag를 사용하지 않을 예정이라 0을 넣었습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            struct io_uring _ring;
+
+            if ( 0 != io_uring_queue_init( QUEUE_DEPTH, &_ring, 0 ) )
+            {
+                printf( "[ERROR] : io_uring_queue_init : %d", errno );
+                return false;
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    그 다음은 async 형태로 요청을 받아서 깨어나서 처리하는 과정을 보겠습니다. RIO에서는 IOCP로 연동할 경우 GetQueuedCompletionStatus를 통해서 요청을 받고 RIODequeueCompletion으로 요청을 꺼내서 처리하게 됩니다. io_uring은 비슷한 기능을 수행하는 io_uring_wait_cqe가 있습니다. 인자로는 struct io_uring와 결과를 받을 io_uring_cqe*를 전달해야 합니다. 결과는 io_uring_cqe*로 받을 수 있습니다. 보통 RIO-IOCP를 사용 하는 경우에는 GetQueuedCompletionStatus의 LPOVERLAPPED로 개채 정보를 전달하게 됩니다. io_uring은 io_uring_cqe의 user_data에 전달합니다. 따라서 user_data를 통해 보냈을 당시의 Session의 정보를 알 수 있습니다. 
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            int32_t result = 0;
+            RequestContext* context = nullptr;
+
+            result = io_uring_wait_cqe( &_ring, &cqe );
+            if ( result < 0 ) 
+            {
+                printf( "[ERROR] : io_uring_wait_cqe : %d", errno );
+                return false;
+            }
+
+            context                 = ( RequestContext* )cqe->user_data;
+            if ( cqe->res < 0 )
+            {
+                printf( "[ERROR] : io_uring_wait_cqe res : %d", errno );
+                return false;
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    그 다음은 Accept Receive Send와 같은 Socket의 요청을 처리하는 것을 하나 하나 살펴보겠습니다. Accept를 처리 하기 위해서는 먼저 io_uring_sqe 정보를 가져와야 합니다. 정보를 가져온 이후에는 1) accept를 준비하는 함수를 호출하고 2) user_data에 전달할 데이터를 set해야 합니다. 3) 그리고 마지막으로 모든 요청에 동일한 사항으로 작업을 제출해야 합니다. 코드를 보면서 그 과정을 따라갈 수 있도록 하겠습니다
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            io_uring_sqe* sqe = nullptr;
+            RequestContext* requestContext = nullptr;
+
+            // io_uring_sqe 정보 가져오기
+            sqe = io_uring_get_sqe( &_ring );
+
+            // 임의로 전달할 정보 memory allocation
+            requestContext = ( RequestContext* )customMalloc( sizeof( RequestContext ) );
+            assert( nullptr != requestContext );
+
+            requestContext->_eventType  = EventType::ACCEPT;
+
+            // 1) accept를 준비하는 함수
+            io_uring_prep_accept( sqe, serverSocket, ( struct sockaddr* )clientAddr, clientAddrLength, 0 );
+
+            // 2) user_data에 set할 데이터 설정 RequestContext
+            io_uring_sqe_set_data( sqe, requestContext );
+
+            // 3) 작업 제출
+            io_uring_submit( &_ring );
+        </code>
+    </pre>
+</div>
+
+<p>
+    Receive 과정을 살펴 보겠습니다. Receive와 Send는 iovec라는 개채가 필요합니다. 이는 RIO의 RIO_BUF와 동일하고 RIORESULT의 일부 기능이 들어가 있습니다. 그래서 io_uring_prep_readv에서 사용할 iovec 개채의 공간을 할당해서 전달합니다. 그리고 RIO가 IOCP와 달리 한번에 데이터를 여러 개 꺼내올 수 있는 것처럼 io_uring도 여러 개 꺼내올 수 있게 설정할 수 있습니다(iovecCount). 이와 관련해서 multishot이라는 굉장히 유용한 기능이 있습니다. 이는 추후에 다른 글에서 다룰 수 있도록 하겠습니다.
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            io_uring_sqe* sqe = nullptr;
+            RequestContext* requestContext = nullptr;
+
+            sqe = io_uring_get_sqe( &_ring );
+
+            requestContext = ( RequestContext* )customMalloc( sizeof( RequestContext) + sizeof( iovec ) );
+            assert( nullptr != requestContext );
+
+            requestContext->_eventType  = EventType::READ;
+            requestContext->_socket     = serverSocket;
+            // iovec 사용할 개수 설정
+            requestContext->_iovecCount = 1;
+            // buf의 메모리 할당
+            requestContext->_iov[ 0 ].iov_base  = calloc( 1, READ_SIZE );
+            // READ할 LENGTH 설정
+            requestContext->_iov[ 0 ].iov_len   = READ_SIZE;
+
+            // 해당 함수를 통해 iovec 등록 | 마지막 인자는 offset인데 나중에 원형 버퍼를 사용할 때 필요할 수 있습니다.
+            io_uring_prep_readv( sqe, serverSocket, &requestContext->_iov[ 0 ], 1, 0 );
+            io_uring_sqe_set_data( sqe, requestContext );
+
+            io_uring_submit( &_ring );
+        </code>
+    </pre>
+</div>
+
+<p>
+    Send는 동일하게 데이터를 쓰고 iovec를 전달하면 됩니다. 참고로 io_uring_sqe socket과 매칭이 되기 때문에 RIO의 RIO_RQ와 개수는 달라도 원리는 같습니다. 
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+           
+            ...
+            requestContext에 데이터를 설정
+            ...
+
+            io_uring_sqe* sqe = nullptr;
+            sqe = io_uring_get_sqe( &_ring );
+
+            requestContext->_eventType = EventType::WRITE;
+
+            // 보낼 데이터와 개수를 전달한다
+            io_uring_prep_writev( sqe, requestContext->_socket, requestContext->_iov, requestContext->_iovecCount, 0 );
+            io_uring_sqe_set_data( sqe, requestContext );
+
+            io_uring_submit( &_ring );
+        </code>
+    </pre>
+</div>
+
+<p>
+    마지막으로 RIONotify는 RIO에서 Queue의 상태가 변한 경우(주로 RIODequeueCompletion으로 인해 CompletionQueue가 비워진 경우 전달한다) 전달해서 다음 Queue를 읽을 수 있도록 준비하는 함수였습니다. io_uring에서도 동일하게 io_uring_cqe_seen 처리를 해 줘야 Queue의 내용을 읽을 수 있습니다. 물론 해당 함수도 RIONotify처럼 성능에서의 영향은 거의 없다고 합니다. 
+<p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+           
+            int32_t result = 0;
+            RequestContext* context = nullptr;
+
+            result = io_uring_wait_cqe( &_ring, &cqe );
+            if ( result < 0 ) 
+            {
+                printf( "[ERROR] : io_uring_wait_cqe : %d", errno );
+                return false;
+            }
+            ...
+            데이터 처리
+            switch ( context->_eventType )
+            {
+            case EventType::NONE:
+                {
+                    ...
+                }
+                break;
+            case EventType::ACCEPT:
+                {
+                    ...
+                }
+                break;
+            case EventType::READ:
+                {
+                    ...
+                }
+                break;
+            case EventType::WRITE:
+                {
+                    ...
+                }
+                break;
+                ...
+
+            // 마지막에 io_uring_cqe 데이터를 꺼내서 처리 이후에 Queue가 상태가 변경(Empty)를 전달하면 된다.
+            io_uring_cqe_seen( &_ring, cqe );
+        </code>
+    </pre>
+</div>
+
+<p>
+    이렇게 개괄적인 흐름은 살펴봤습니다. 정리가 다 되면 간단한 io_uring의 Echo Server의 코드를 올릴 수 있도록 하겠습니다. 여기서 더 나아가면 IO Thread를 여러 개로 각각의 struct io_uring와 Connection을 관리하는 것으로 확장하는 것이 될 수 있겠습니다.
+<p>
