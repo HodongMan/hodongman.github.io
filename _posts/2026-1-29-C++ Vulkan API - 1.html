@@ -1,0 +1,155 @@
+---
+layout: post
+title:  "Introduction to C++ Vulkan API - 1"
+subtitle: "Vulkan API의 소개 - GLFWWindow VkInstance VkSurfaceKHR"
+date:   2026-2-1 16:49:48 -0400
+background: '/img/posts/04.jpg'
+---
+
+<h2 class="section-heading">Vulkan 소개</h2>
+
+<p>
+    작성중...
+<p>
+
+<h2 class="section-heading">Vulkan GLFW 시작하기</h2>
+
+<p>
+    가장 먼저 호출할 함수는 glfwInit() 입니다. 이 함수는 말 그대로 glfw 관련 기능을 사용하기 전에 초기화 하고 준비하는 역할을 합니다. 크게 코드를 따라 분석해보면은 1) allocator 준비 2) Platform 백엔드 및 관련 초기화 / 준비 3) Input System 초기화 4) 내부 Timer 초기화 5) 에러 처리 준비(TLS준비), 기본 WindowHints 초기화 크게 이렇게 처리하는 것으로 보입니다.
+</p>
+
+<img class="img-fluid" src="https://hodongman.github.io/img/into-vulkan/glfwinit.png" alt="glfwInit()">
+<span class="caption text-muted">glfwInit()</span>
+
+<p>
+    2)의 경우 _glfw.platform.init() 함수에서 _glfwInitWin32를 호출 합니다. 처리 로직은 기본 Message Window인 Helper Window를 WinAPI에 맞춰서 생성하고 초기화 합니다(createHelperWindow) 그리고 createMonitor함수로 Win32 Display Enumeration를 통해 Monitor 리스트를 구성 합니다 3) Input System은 Win Platform에 맞춰서 GLFW Key를 매핑하거나 GamePad 관련된 기능을 준비합니다. 4) 내부 Timer는 QueryPerformanceFrequency와 QueryPerformanceCounter 기능을 사용해서 준비 합니다. 5) WindowHints를 초기화 하고 그 전에 에러 상태/스레드별 상태 저장을 위한 TLS 그리고 Lock을 초기화 하는 기능을 수행합니다
+</p>
+
+<p>
+    그 다음으로 호출할 것은 glfwVulkanSupported() 입니다. 해당 함수는 내부에서 _glfwInitVulkan()를 호출 합니다. 해당 함수의 기능으로는 1) OS별로 Vulkan loader를 동적 로드 2) vkGetInstanceProcAddr 그리고 ExtensionProperties LayerProperties 등을 준비하고 캐시해 둡니다. 이정도면 Vulkan을 사용할 수 있는 최소 상태만 확인하는 것으로 이해하면 될것 같네요
+</p>
+
+<p>
+    Vulkan을 사용하게 되면 OpenGl API Context를 사용하지 않고 GLFW는 Window 창을 만드는데만 사용할 것이라고 명시가 필요합니다. 그리고 Context는 Vulkan으로 생성하게 하는 것입니다. glfwWindowHint( GLFW_CLIENT_API, GLFW_NO_API );를 호출 하는 것은 그런 의미를 담고 있습니다. 따라서 내가 Vulkan을 사용하려면 해당 함수의 호출은 필수라고 할 수 있습니다. 그리고 그 순서는 GLFW로 Window를 만들기 전입니다.
+</p>
+
+<p>
+    마지막으로 GLFW 과정은 glfwCreateWindow입니다. 이 기능은 Windows Platform 에서는 createNativeWindow라는 함수를 통해서 옵션이 Valid한지 검증을 먼저 하고 그 다음으로 WNDCLASSEXW 개채를 옵션에 설정한 값으로 채웁니다. 그리고 CreateWindowExW를 통해 Window 개채를 생성하고 이전에 초기화 한 Monitor와 엮은 뒤에 ShowWindow를 호출합니다. 그리고 그 결과값으로 GLFWWindow*를 반환 합니다. 따라서 이 때 Window 창이 생성 됩니다. 그리고 아까 지정한 GLFW_NO_API 옵션 덕분에 OpenGl Context를 생성하는 부분은 넘어 갈 것입니다.
+</p>
+
+
+<h2 class="section-heading">VkInstance</h2>
+
+<p>
+    VkInstance는 Vulkan에서 가장 먼저 생성해야 하는 Handle 입니다. 왜냐하면 가장 상위 Vulkan Handle이기 때문 입니다. 위 설명에서 초기화 한 Vulkan Loader와 Driver에게 Application을 등록하고 가장 기본적인 요소들을 생성 및 초기화 합니다. 이 작업을 위해 필요한 struct가 두 가지 있습니다. VkApplicationInfo와 VkInstanceCreateInfo가 이 두가지 입니다.
+</p>
+
+<p>
+    VkApplicationInfo는 말 그대로 내가 생성한 Application에 적용할 직접적인 정보 입니다. 예를 들면 Application 이름이나 APIVersion 등을 지정할 수 있습니다. 
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            	VkApplicationInfo applicationInfo				= {};
+              applicationInfo.sType							      = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+              applicationInfo.pNext							      = nullptr;
+              applicationInfo.pApplicationName				= _applicationName.c_str();
+              applicationInfo.applicationVersion			= VK_MAKE_API_VERSION( 0, 0, 0, 1 );
+              applicationInfo.pEngineName						  = "HDEngine Vulkan";
+              applicationInfo.engineVersion					  = VK_MAKE_API_VERSION( 0, 1, 0, 0 );
+              applicationInfo.apiVersion						  = VK_MAKE_API_VERSION( 0, 1, 1, 0 );
+        </code>
+    </pre>
+</div>
+
+<p>
+    그 다음은 VkInstanceCreateInfo 입니다. VkInstanceCreateInfo는 활성화 할 instance의 extension을 지정하거나 layer를 지정할 수 있습니다. 예를 들면 Window를 처리하는 데 VK_KHR_surface 그리고 VK_KHR_win32_surface이 필요합니다. VK_KHR_surface는 Platform 독립 WSI Interface를 구성 합니다. 그리고 그 중 VK_KHR_win32_surface는 Windows OS에 관련된 것을 구성 합니다. 해당 정보는 glfwGetRequiredInstanceExtensions함수를 호출 해서 얻을 수 있습니다.
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            	const char** extensions							= glfwGetRequiredInstanceExtensions( &extensionCount );
+              if ( 0 == extensionCount )
+              {
+                HDASSERT( false, "glfwGetRequiredInstanceExtensions 호출에 실패 했습니다." );
+                return false;
+              }
+        </code>
+    </pre>
+</div>
+
+<p>
+    extension 지정 완료 후에 layer를 확인하겠습니다. 보통 layer는 Debug Mode시에 VK_LAYER_KHRONOS_validation를 활성화 시켜서 문제를 확인하곤 합니다. 따라서 이 두 가지를 설정하면 VkInstanceCreateInfo 설정을 완료할 수 있습니다.
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            	VkInstanceCreateInfo instanceCreateInfo	= {};
+              instanceCreateInfo.sType								    = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+              instanceCreateInfo.pNext								    = nullptr;
+              instanceCreateInfo.pApplicationInfo					= &applicationInfo;
+              instanceCreateInfo.enabledExtensionCount		= extensionCount;
+              instanceCreateInfo.ppEnabledExtensionNames	= extensions;
+              instanceCreateInfo.enabledLayerCount				= 0;
+
+              #ifndef RELEASE
+	                instanceCreateInfo.enabledLayerCount	  = 1;
+                  const char* validationLayers[]					= { "VK_LAYER_KHRONOS_validation" };
+	                instanceCreateInfo.ppEnabledLayerNames	= validationLayers;
+              #endif
+
+              VkInstance vkInstance									      = VK_NULL_HANDLE;
+              VkResult result											        = vkCreateInstance( &instanceCreateInfo, nullptr, &vkInstance );
+              if ( VK_SUCCESS != result )
+              {
+                HDASSERT( false, "vkCreateInstance Error " );
+                return false;
+              }
+        </code>
+    </pre>
+</div>
+
+<h2 class="section-heading">VkSurfaceKHR</h2>
+
+<p>
+    VkSurfaceKHR는 플랫폼 윈도우 시스템과 Vulkan을 연결하는 WSI(Window System Integration) 객체입니다. Vulkan은 D3D12와 달리 특정 Platform에 종속적이지 않기 때문에 이러한 계층이 필요 합니다. 그 중에서도 PhysicalDevice가 Surface를 지원하는지에 관한 Query가 주요 기능 입니다. 그래서 쉽게 말하면 SwapChain을 적용하기 위한 정보를 가지고 있는 개체 입니다. 데이터를 Present 하기 위한 정보를 질의할 수 있는 구조체 입니다. 크게 생성하는 방법은 두 가지가 있는데 1) 아까 생성한 GLFWWindow의 데이터를 활용해서 glfwCreateWindowSurface를 직접 호출하는 방식과 2) PFN_vkCreateWin32SurfaceKHR를 vkGetInstanceProcAddr로 얻어서 Window OS의 hwnd와 hinstance를 직접 전달하는 방식입니다. 서로 큰 차이는 없고 GLFWWindow에 있는 정보로 참조할 것이냐 아니면 직접 넣을 것이냐 정도의 차이 입니다. 직접 넣을 거면은 VkWin32SurfaceCreateInfoKHR를 생성해서 인자로 전달해야 합니다.
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+              // 방법 1)
+            	VKResult result											= glfwCreateWindowSurface( _instance, _window, nullptr, &_surface );
+              if ( VK_SUCCESS != result )
+              {
+                HDASSERT( false, "glfwCreateWindowSurface에 실패 했습니다. 비정상 입니다." );
+                return false;
+              }
+
+              // 방법 2) 
+
+              VkWin32SurfaceCreateInfoKHR surfaceCreateInfo			= {};
+              surfaceCreateInfo.sType									= VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+              surfaceCreateInfo.hwnd									= windowHandle;
+              surfaceCreateInfo.hinstance							= hInstance;
+
+              PFN_vkCreateWin32SurfaceKHR vkCreateWin32SurfaceKHR		= ( PFN_vkCreateWin32SurfaceKHR )vkGetInstanceProcAddr( vkInstance, "vkCreateWin32SurfaceKHR" );
+              HDASSERT( nullptr != vkCreateWin32SurfaceKHR, "PFN_vkCreateWin32SurfaceKHR call error" );
+
+              VkSurfaceKHR surface;
+              result													= vkCreateWin32SurfaceKHR( vkInstance, &surfaceCreateInfo, 0, &surface );
+              if ( VK_SUCCESS != result )
+              {
+                HDASSERT( false, "vkCreateWin32SurfaceKHR Error " );
+                return false;
+              }
+        </code>
+    </pre>
+</div>
+
+<p>
+    여기 까지 수행하게 된다면 Vulkan을 사용해서 무언가를 할 준비를 끝냈다고 볼 수 있습니다. 간단한 Window 창을 생성하고 Vulkan API를 쓸 환경을 준비하는 과정까지만 완료 했습니다. 본격젹으로 Vulkan API를 활용해서 화면에 무언가를 그리는건 다음 단계 입니다.
+</p>
