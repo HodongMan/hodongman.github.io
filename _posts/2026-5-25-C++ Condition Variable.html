@@ -1,0 +1,156 @@
+---
+layout: post
+title:  "C++ Condition Variable"
+subtitle: "Condition Variable 소개와 그것을 활용한 Thread Queue에 대한 예시"
+date:   2026-5-25 13:49:38 -0500
+background: '/img/posts/05.jpg'
+---
+
+<h2 class="section-heading">Condition Variable</h2>
+
+<p>
+    Thread 단위의 작업을 할당하는 경우 동기화가 필수적 입니다. 동기화를 하는 방법은 여러 가지가 있습니다. while (progress); 처럼 CPU를 활용해서 체크하는 방법도 있을 것입니다. 반면에 조건이 충족할 때까지 Wait 상태에 있다가 특정한 Signal에 의해 깨어나서 작업을 수행하는 경우도 있을 것입니다. Condition Variable은 후자의 작업을 수행하기 위해 존재합니다. 중요한 점은 Condition Variable 자체가 조건을 저장하지 않는다는 것입니다. 조건은 Queue의 empty 상태 / Job Count / 종료 Flag 같은 공유 상태로 표현됩니다. Thread가 조건(Queue에 Job을 추가하는 경우)을 충족할 때까지는 대기하다가 Condition Variable을 통해 신호를 발생하면 Thread는 Wait 상태에서 깨어나 Queue에 있는 Job을 처리하는 방식입니다. 이 방식은 CPU를 계속 활용할 필요 없다는 점에서 유용합니다. 또한 개발자 입장에서 로직을 작성하기가 편합니다. 그래서 저는 개인적으로 ThreadPool 혹은 Thread 단위의 작업을 수행하는 경우 적극적으로 사용하곤 합니다. 또한 바로 User Mode Object이고 가능한 경우 커널 모드 전환을 피할 수 있어 가볍게 사용할 수 있다는 장점이 있습니다.
+</p>
+
+<p>
+    C++에서는 std::condition_variable이 존재합니다. Linux에서는 pthread_cond_t가 존재합니다. 하지만 저는 Windows의 CONDITION_VARIABLE을 활용하는 방식과 그것에 대한 간단한 설명을 통해서 활용하고자 합니다. 사실 Linux 및 Windows 환경에서도 편하게 잘 돌아가는 코드를 작성하려면 std::condition_variable이 유용합니다. 물론 std::lock 계열의 기능과 std::thread와의 연동에서도 강점이 있습니다. 하지만 저는 이런 강점에도 CONDITION_VARIABLE을 적극적으로 사용하는 이유가 있습니다. 1) Thread의 정해진 방식이 아닌 제가 원하는 기능으로 커스텀 하기에 유용합니다. 2) 제가 작성한 SRWLock Wrapper 객체와 동기화 하기에 편합니다. 3) 플랫폼 독립성보다 Windows 환경에서의 직접 제어와 디버깅 편의성을 우선했습니다. 그래서 저는 다음 세 가지 이유로 인해 직접 접근해서 사용합니다.
+</p>
+
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            #include "pch.h"
+            #include "ConditionVariableSRW.h"
+
+            #include "RWLock.h"
+
+            CONDITION_VARIABLE _conditionVariable;
+
+            ConditionVariableSRW::ConditionVariableSRW( RWLock* locker ) noexcept
+                : _locker{ locker }
+            {
+                HDASSERT( nullptr != _locker, "RWLock 객체가 비정상 입니다." );
+
+                ::InitializeConditionVariable( &_conditionVariable );
+            }
+
+            void ConditionVariableSRW::sleepConditionVariable( void ) noexcept
+            {
+                const BOOL result = ::SleepConditionVariableSRW( &_conditionVariable, &_locker->_locker, INFINITE, 0 );
+
+                HDASSERT( FALSE != result, "SleepConditionVariableSRW 실패" );
+            }
+
+            void ConditionVariableSRW::wakeOne( void ) noexcept
+            {
+                ::WakeConditionVariable( &_conditionVariable );
+            }
+
+            void ConditionVariableSRW::wakeAll( void ) noexcept
+            {
+                ::WakeAllConditionVariable( &_conditionVariable );
+            }
+
+        </code>
+    </pre>
+</div>
+
+<p>
+    코드를 하나하나 분석해보겠습니다. InitializeConditionVariable은 CONDITION_VARIABLE을 사용하기 전에 초기화 하는 과정입니다. 이 과정을 수행해야 Sleep 관련 함수들을 사용할 수 있습니다. SleepConditionVariableSRW는 Thread를 대기 상태로 전환할 수 있게 하는 함수 입니다. 여기서 Lock 관련 객체가 필요합니다. SleepConditionVariableCS는 Critical Section 객체가 필요합니다. SleepConditionVariableSRW는 SRWLock 객체가 필요합니다. 저는 SRWLock을 사용해서 동기화를 하기 때문에 SleepConditionVariableSRW를 사용했습니다. WakeConditionVariable은 대기 중인 Thread 1개를 깨우는 함수입니다. WakeAllConditionVariable은 대기 중인 모든 Thread를 깨우는 함수입니다. 만약 여러 Worker Thread를 깨워야 하는 상황에서 WakeConditionVariable을 짧은 시간에 여러 번 호출하는 구조면 내부 Wake Count bit field 문제로 인해 의도보다 많은 Thread가 깨어날 수 있습니다. 따라서 처음부터 모든 Worker를 깨울 의도라면 WakeAllConditionVariable을 사용하는 편이 더 명확합니다.
+</p>
+
+<h2 class="section-heading">Spurious Wakeup</h2>
+
+<p>
+    Condition Variable을 사용할 때 주의해야 할 문제가 있습니다. 그것은 Spurious Wakeup(가짜 깨어남)입니다. Windows Condition Variable의 경우 내부적으로 필요한 정보를 포인터 크기의 공간에 저장하기 때문에 매우 많은 Wake 요청이 짧은 시간에 발생하면 내부 Wake Count를 정확히 표현하지 못하고 보수적으로 여러 Thread를 깨울 수 있습니다. 또한 깨어난 Thread가 실제로 실행되기 전에 다른 Thread가 먼저 조건을 소비해버리는 Stolen Wakeup도 발생할 수 있습니다. 따라서 Condition Variable을 사용할 때는 Wait에서 반환되었다는 사실만 믿고 작업을 진행하면 안 됩니다. 반드시 Queue empty 여부나 Job Count 같은 실제 조건을 while loop로 다시 확인해야 합니다.
+</p>
+
+<p>
+    따라서 코드를 작성할 때 Thread가 Job Queue가 empty일 경우에 대한 처리를 수행한다던지 이러면 문제가 발생해도 괜찮을 것입니다. 알고 나면 별 문제는 아니지만 모르면 당황할 수는 있습니다.
+</p>
+
+<h2 class="section-heading">Condition Variable 사용하기</h2>
+
+<p>
+    Thread 생성 이후에 대기 하려면은 SleepConditionVariableSRW을 호출하면 됩니다. 여기서 가장 큰 주의 할 점은 반드시 SRWLock의 배타 잠금을 걸어야 한다는 점 입니다. 그것은 내부 동작과 관련이 있습니다. 호출되는 순간 시스템은 락을 자동으로 해제하고 Thread를 대기 상태로 전환합니다. 그래서 잠금을 반드시 걸어줘야 합니다. 그리고 조건이 충족되어 스레드가 깨어나면 함수는 락을 다시 획득한 상태로 됩니다. 그래서 저는 RAII 방식으로 구현한 AutoLocker를 사용해서 처리 했습니다.
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            _workerThreads[ ii ] = ( HANDLE )::_beginthreadex( nullptr, 0, workerThreadProc, arg, 0, nullptr );
+            
+            while ( true )
+            {
+                {
+                    AutoWriteLocker locker( &_workLock );
+                    while ( false == _hasWork[ workerId ] )
+                    {
+                        _workCondition.sleepConditionVariable(); // thread 대기
+                    }
+
+                    _hasWork[ workerId ]				= false;
+
+                    if ( true == _terminated )
+                    {
+                        break;
+                    }
+                }
+
+                ...
+            }
+        </code>
+    </pre>
+</div>
+
+<p>
+    Spurious Wakeup 상태를 대비하기 위해서 Thread Index를 기반한 bool값 변수 리스트를 사용했습니다. 각 Thread는 자신이 지정된 변수만 접근할 수 있으므로 Thread 개별당 확인이 가능합니다. 이렇게 loop에서 한번 더 확인을 하고 hasWork를 통해 작업이 없으면은 다시 SleepConditionVariableSRW를 호출하게 됩니다. 그래서 실제로 처리할 작업이 없다면 다시 Wait 상태로 들어갈 수 있습니다. AutoWriteLocker는 내부에 Exclusive Lock이 있습니다. 따라서 잠금을 걸고 호출한 것입니다.
+</p>
+
+<p>
+    그 다음은 작업을 생성한 다음에 Thread를 깨우는 방식을 살펴보겠습니다. 일반적으로 게임 서버에서는 IO Multiplexing에서 받은 한개 이상의 로직을 가지고 깨우는 방식이라서 WakeOne과 WakeAll을 방식에 따라 사용할 수 있을 것입니다. 하지만 제가 예시로 사용한 부분은 1) Job을 Main Thread에서 몇십~몇천개 생성 2) 동기화를 덜하기 위해 작업의 번호를 각 Worker Thread마다 Main Thread가 할당 3) Worker Thread는 할당된 작업 Range를 가지고 작업 수행 이 구성입니다. 따라서 WakeOne을 쓸 가능성이 매우 낮죠
+</p>
+
+<div class="highlighter-rouge">
+    <pre class="highlight">
+        <code>
+            	// pendingWorkers 먼저 set — 워커가 _hasWork 보고 깨어나기 전에 카운터 준비
+                {
+                    AutoWriteLocker locker( &_doneLock );
+                    _pendingWorkers							= RENDER_WORKER_COUNT;
+                }
+
+                // 모든 워커에게 일 있다고 마킹
+                {
+                    AutoWriteLocker locker( &_workLock );
+                    for ( int32_t ii = 0; ii < RENDER_WORKER_COUNT; ++ii )
+                    {
+                        _hasWork[ ii ]						= true;
+                    }
+                }
+
+                // 모든 워커 깨우기
+                _workCondition.wakeAll();
+        </code>
+    </pre>
+</div>
+
+<p>
+    _pendingWorkers는 Worker Thread가 작업을 끝낼 때마다 하나씩 감소시키고 마지막 Worker가 작업을 완료해서 값이 0이 되었을 때 Main Thread를 깨우기 위한 장치입니다.
+    이 예제에서는 Main Thread가 모든 Worker에게 작업 범위를 할당한 뒤 _workCondition.wakeAll()을 호출해서 Worker Thread들을 한 번에 깨우는 구조입니다. 그러면 Worker Thread는 Main Thread가 할당한 작업을 확인한 후에 수행합니다.
+</p>
+
+<p>
+    제 로직은 Wake할 때 Lock을 걸진 않았습니다. 이유는 작업을 수행하는 자체가 동기화가 필요 없는 구성이기도 하고 필요한 구성에는 제가 이후에 락을 구분에서 사용했기 때문입니다. 만약 동기화 상태에서 깨우게 되면 조건이 변경된 직후에 바로 스레드를 깨우기 때문에 레이스 컨디션(Race Condition)을 고민할 필요가 없어 코드가 직관적입니다. 다만 성능 문제가 있을 수 있습니다. 왜냐하면 Thread 다수가 깨어나서 Lock 관련된 획득 처리를 하기 때문에 병목이 발생할 가능성이 높습니다. 그래서 보통 WakeAllConditionVariable을 사용할 때에는 락을 해제한 상태로 호출하고 그 이후에 처리를 하는 구성으로 가는게 바람직하다고 생각합니다. WakeConditionVariable은 하나의 Thread만 깨우므로 WakeAllConditionVariable에 비해 lock 경합이 작습니다. 다만 이 경우에도 조건이 되는 공유 상태 변경은 반드시 lock 보호 안에서 완료되어야 합니다.
+</p>
+
+<h2 class="section-heading">Condition Variable 사용 후기</h2>
+
+<p>
+    이전에는 Semaphore나 별도의 제어용 flag 변수를 만들어서 사용했었습니다. 이에 비해 Condition Variable은 Thread를 관리하는 코드 흐름을 더 직관적으로 만들고 성능 측면에서도 괜찮은 선택이라고 생각합니다. 전체적으로 Thread 제어 흐름이 더 명확해졌습니다. 이러한 이점 때문에 Thread Pool이나 Thread Control이 필요한 지점에서는 Condition Variable 사용을 적극적으로 고민해보는 것을 추천합니다.
+</p>
+
+<p>
+    참고자료 : https://devblogs.microsoft.com/oldnewthing/20180201-00/?p=97946
+</p>
